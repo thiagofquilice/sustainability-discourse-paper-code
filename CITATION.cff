@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+message: "If you use this code supplement, please cite the associated paper."
+title: "Sustainability Discourse Paper Code"
+authors:
+  - family-names: "Quilice"
+    given-names: "Thiago"
+repository-code: "https://github.com/thiagofquilice/sustainability-discourse-paper-code"
+license: "MIT"
+version: "v1.0-paper-supplement"
+
