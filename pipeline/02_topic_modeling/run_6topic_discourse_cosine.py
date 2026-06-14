@@ -28,7 +28,7 @@ from workflow_common import (
 )
 
 
-WORKFLOW_ROOT = Path(__file__).resolve().parents[1]
+WORKFLOW_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG = WORKFLOW_ROOT / "config" / "paper_6topic_pipeline_config.json"
 DEFAULT_OUTPUT_ROOT = WORKFLOW_ROOT / "outputs" / "cosine"
 

@@ -9,13 +9,11 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
-from openpyxl.utils import get_column_letter
 
-from cross_source_microtopic_common import DEFAULT_DISCOURSE_FUNCTION_OUTPUT_ROOT
 from micro_topic_evolution_common import OUTPUT_ROOT as EVOLUTION_OUTPUT_ROOT
 
 
-WORKFLOW_ROOT = Path("paper_pipeline")
+WORKFLOW_ROOT = Path(__file__).resolve().parents[2]
 RAW_MICRO_ROOT = WORKFLOW_ROOT / "outputs" / "bertopic_micro_unsupervised"
 RAW_MICRO_ROOT_MULTIASPECT = WORKFLOW_ROOT / "outputs" / "bertopic_micro_unsupervised_multiaspect"
 MERGE_OUTPUT_ROOT = WORKFLOW_ROOT / "outputs" / "microtopic_posthoc_merge_review"
@@ -27,22 +25,14 @@ MERGE_FIRST_GROUP_REVIEW_MULTIASPECT_OUTPUT_ROOT = (
 )
 MERGE_FIRST_HIERARCHICAL_REVIEW_OUTPUT_ROOT = WORKFLOW_ROOT / "outputs" / "microtopic_merge_first_hierarchical_review"
 PAIR_OUTPUT_ROOT = WORKFLOW_ROOT / "outputs" / "microtopic_cross_source_pairs_threshold_065"
-DISCOURSE_OUTPUT_ROOT = DEFAULT_DISCOURSE_FUNCTION_OUTPUT_ROOT
 MERGED_OUTPUT_ROOT = MERGE_OUTPUT_ROOT / "merged_outputs"
 MERGED_MICRO_ROOT = WORKFLOW_ROOT / "outputs" / "bertopic_micro_merged"
 MERGED_MICRO_ROOT_MULTIASPECT_REVIEWED = WORKFLOW_ROOT / "outputs" / "bertopic_micro_merged_multiaspect_reviewed"
 MERGE_FIRST_EVOLUTION_OUTPUT_ROOT = WORKFLOW_ROOT / "outputs" / "bertopic_micro_evolution_merge_first"
 MERGE_FIRST_PAIR_OUTPUT_ROOT = WORKFLOW_ROOT / "outputs" / "microtopic_cross_source_pairs_threshold_065_merge_first"
-MERGE_FIRST_DISCOURSE_OUTPUT_ROOT = (
-    WORKFLOW_ROOT / "outputs" / "microtopic_same_issue_discourse_function_top2_threshold055_with_academic_media_merge_first"
-)
 CORPORATE_FOCUS_PAIR_OUTPUT_ROOT = WORKFLOW_ROOT / "outputs" / "microtopic_cross_source_pairs_corporate_focus"
 CORPORATE_FOCUS_REVIEW_OUTPUT_ROOT = WORKFLOW_ROOT / "outputs" / "corporate_focus_review"
 CORPORATE_FOCUS_STAGE12_INPUT_ROOT = WORKFLOW_ROOT / "outputs" / "corporate_focus_stage12_input"
-CORPORATE_FOCUS_AGGREGATED_TEMPORAL_OUTPUT_ROOT = (
-    WORKFLOW_ROOT / "outputs" / "corporate_focus_temporal_aggregated_no_mnn"
-)
-
 SELECTED_TOPICS_PATH = EVOLUTION_OUTPUT_ROOT / "selected_micro_topics.csv"
 YEAR_SUMMARIES_PATH = EVOLUTION_OUTPUT_ROOT / "year_summaries" / "micro_topic_year_summaries.csv"
 YEAR_EVIDENCE_PATH = EVOLUTION_OUTPUT_ROOT / "micro_topic_year_evidence.csv"
@@ -157,6 +147,8 @@ def load_stage2_rows(include_pending: bool = True) -> pd.DataFrame:
 
 
 def workbook_autofit(writer: pd.ExcelWriter, sheet_name: str, frame: pd.DataFrame, freeze_cell: str = "A2") -> None:
+    from openpyxl.utils import get_column_letter
+
     worksheet = writer.sheets[sheet_name]
     worksheet.freeze_panes = freeze_cell
     worksheet.auto_filter.ref = worksheet.dimensions

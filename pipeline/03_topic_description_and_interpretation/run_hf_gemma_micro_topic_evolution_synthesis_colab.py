@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
-from tqdm.auto import tqdm
 
 
 PROMPT_TEMPLATE = """You are synthesizing the temporal evolution of one BERTopic micro-topic.
@@ -356,6 +355,8 @@ def generate_one(model, tokenizer, prompt: str, args: argparse.Namespace) -> str
 
 def main() -> None:
     args = parse_args()
+
+    from tqdm.auto import tqdm
     args.output_dir.mkdir(parents=True, exist_ok=True)
     output_csv = args.output_dir / "micro_topic_evolution_narratives.csv"
     output_jsonl = args.output_dir / "micro_topic_evolution_narratives.jsonl"

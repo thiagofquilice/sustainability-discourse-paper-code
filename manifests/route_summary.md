@@ -1,26 +1,12 @@
-# Paper Route Summary
+# Minimal Route Summary
 
-The code supplement follows the final paper route:
+The retained code covers only the Chapter 4 route needed to inspect the method:
 
-```text
-Unified six-topic pipeline
-+ corporate-focus branch with manual overrides
-+ post-comment paper results package
-```
+1. Six-domain catalog and cosine assignment.
+2. Validation/adjustment materialization.
+3. Source-domain BERTopic microtopic modeling.
+4. Microtopic consolidation.
+5. Colab/Gemma annual and temporal synthesis.
+6. Corporate-centered topic review and selection.
 
-Main route components:
-
-- six macro-topic descriptor catalog;
-- embedding/cosine assignment and LLM validation;
-- source-by-macro-topic BERTopic microtopic modeling;
-- microtopic review, merge, and corporate-centered selection;
-- LLM-assisted annual summaries and temporal evolution narratives;
-- corporate review and override decisions;
-- cross-source microtopic comparisons;
-- longitudinal prevalence and temporal relation diagnostics;
-- final paper tables, figures, and appendix scripts.
-
-This repository includes code and workflow notes for the paper-facing route.
-It does not include earlier pilots, smoke tests, restored download staging
-folders, or exploratory analyses outside the final route.
-
+Later figure/table rendering, temporal diagnostics, interface materials, and complementary analyses were removed from this minimal code supplement.

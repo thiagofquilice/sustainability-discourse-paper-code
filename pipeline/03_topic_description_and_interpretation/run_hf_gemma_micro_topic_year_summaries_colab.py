@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
-from tqdm.auto import tqdm
 
 
 PROMPT_TEMPLATE = """You are reading yearly evidence for one BERTopic micro-topic within a source-topic subgroup.
@@ -250,6 +249,8 @@ def flush_rows(output_csv: Path, rows: list[dict[str, Any]], wrote_header: bool)
 
 def main() -> None:
     args = parse_args()
+
+    from tqdm.auto import tqdm
     args.output_dir.mkdir(parents=True, exist_ok=True)
     output_csv = args.output_dir / "micro_topic_year_summaries.csv"
     output_jsonl = args.output_dir / "micro_topic_year_summaries.jsonl"

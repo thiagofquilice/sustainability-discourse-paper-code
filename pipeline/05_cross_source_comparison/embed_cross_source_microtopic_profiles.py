@@ -13,6 +13,10 @@ from cross_source_microtopic_common import OUTPUT_ROOT, configure_logging, write
 from workflow_common import detect_embedding_model_name, load_config, load_sentence_transformer
 
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_CONFIG = REPO_ROOT / "config" / "paper_6topic_pipeline_config.json"
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-root", type=Path, default=OUTPUT_ROOT)
@@ -32,7 +36,7 @@ def main() -> None:
     if profiles.empty:
         raise SystemExit("No microtopic profiles found to embed.")
 
-    config = load_config(Path("paper_pipeline/config/paper_6topic_pipeline_config.json"))
+    config = load_config(DEFAULT_CONFIG)
     model_name = args.model_name or detect_embedding_model_name(config)
     model = load_sentence_transformer(model_name)
 

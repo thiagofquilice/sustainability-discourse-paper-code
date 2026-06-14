@@ -13,25 +13,21 @@ from microtopic_posthoc_merge_common import CORPORATE_FOCUS_STAGE12_INPUT_ROOT, 
 
 README_TEXT = """# Corporate-Focused Stage 1/2 Package
 
-This package mirrors the output-root layout expected by the micro-topic evolution scripts.
+This package mirrors the output-root layout expected by the retained Colab/Gemma scripts.
 
 Recommended Colab flow after unzipping into a working directory:
 
 1. Stage 1
-python scripts/run_micro_topic_year_summaries.py \\
-  --input-csv /content/corporate_focus_stage12_input/micro_topic_year_evidence.csv \\
+python run_hf_gemma_micro_topic_year_summaries_colab.py \
+  --input-csv /content/corporate_focus_stage12_input/micro_topic_year_evidence.csv \
   --output-dir /content/corporate_focus_stage12_input/year_summaries
 
 2. Stage 2
-python scripts/run_micro_topic_evolution_synthesis.py \\
-  --selected-topics /content/corporate_focus_stage12_input/selected_micro_topics.csv \\
-  --annual-summaries /content/corporate_focus_stage12_input/year_summaries/micro_topic_year_summaries.csv \\
-  --year-evidence /content/corporate_focus_stage12_input/micro_topic_year_evidence.csv \\
+python run_hf_gemma_micro_topic_evolution_synthesis_colab.py \
+  --selected-topics /content/corporate_focus_stage12_input/selected_micro_topics.csv \
+  --annual-summaries /content/corporate_focus_stage12_input/year_summaries/micro_topic_year_summaries.csv \
+  --year-evidence /content/corporate_focus_stage12_input/micro_topic_year_evidence.csv \
   --output-dir /content/corporate_focus_stage12_input/evolution_summaries
-
-3. Optional summary build
-python scripts/build_micro_topic_evolution_summary.py \\
-  --output-root /content/corporate_focus_stage12_input
 
 The package intentionally contains only the corporate-focused subset prepared locally.
 """

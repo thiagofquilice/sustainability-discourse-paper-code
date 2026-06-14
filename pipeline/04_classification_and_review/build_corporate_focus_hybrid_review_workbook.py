@@ -20,12 +20,11 @@ from microtopic_posthoc_merge_common import (
 )
 
 
-PIPELINE_ROOT = Path("paper_pipeline")
+PIPELINE_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_BUNDLE_ROOT = PIPELINE_ROOT / "outputs" / "corporate_focus_stage12_colab_drive_with_overrides"
 DEFAULT_REVIEW_ROOT = PIPELINE_ROOT / "outputs" / "corporate_focus_review_with_overrides"
 DEFAULT_STAGE12_INPUT_ROOT = PIPELINE_ROOT / "outputs" / "corporate_focus_stage12_input_with_overrides"
 DEFAULT_PAIR_ROOT = PIPELINE_ROOT / "outputs" / "microtopic_cross_source_pairs_corporate_focus"
-DEFAULT_GLOBAL_LLM_PAIR_ROOT = PIPELINE_ROOT / "outputs" / "microtopic_cross_source_pairs_threshold_065"
 
 
 PHASE_NUMBERS = [1, 2, 3, 4]
@@ -46,7 +45,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--review-root", type=Path, default=DEFAULT_REVIEW_ROOT)
     parser.add_argument("--stage12-input-root", type=Path, default=DEFAULT_STAGE12_INPUT_ROOT)
     parser.add_argument("--pair-root", type=Path, default=DEFAULT_PAIR_ROOT)
-    parser.add_argument("--global-llm-pair-root", type=Path, default=DEFAULT_GLOBAL_LLM_PAIR_ROOT)
     parser.add_argument("--merged-micro-root", type=Path, default=MERGED_MICRO_ROOT_MULTIASPECT_REVIEWED)
     parser.add_argument("--log-level", type=str, default="INFO")
     return parser.parse_args()
@@ -111,12 +109,9 @@ def build_alignment_note(row: pd.Series) -> str:
         return "Manual override retained with a corporate anchor; compare summaries and phase ranges manually."
 
     overlap = narrative_overlap_years(row)
-    precedence = str(row.get("precedence_type_label") or "").strip()
     if overlap is None:
         return "Narratives available on both sides; compare summaries manually."
-    if precedence:
-        return f"Narrative spans overlap for {overlap} year(s); precedence signal: {precedence}."
-    return f"Narrative spans overlap for {overlap} year(s); no precedence label available."
+    return f"Narrative spans overlap for {overlap} year(s); compare summaries and phase ranges manually."
 
 
 def narrative_digest(row: pd.Series) -> str:
@@ -180,41 +175,6 @@ def load_review_inputs(review_root: Path, stage12_input_root: Path) -> tuple[pd.
     return included_corporate, included_noncorporate, manual_override
 
 
-def build_pair_metadata(pair_root: Path, global_llm_pair_root: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
-    precedence_path = pair_root / "pair_precedence_classification.csv"
-    join_ready_path = pair_root / "pair_join_ready_table.csv"
-    global_llm_path = global_llm_pair_root / "llm_enriched_pair_table.csv"
-
-    precedence = read_csv_required(precedence_path) if precedence_path.exists() else pd.DataFrame()
-    join_ready = read_csv_required(join_ready_path) if join_ready_path.exists() else pd.DataFrame()
-    global_llm = read_csv_required(global_llm_path) if global_llm_path.exists() else pd.DataFrame()
-
-    if not precedence.empty and not join_ready.empty:
-        precedence = precedence.merge(
-            join_ready[
-                [
-                    "pair_id",
-                    "lenient_is_viable",
-                    "balanced_is_viable",
-                    "both_have_narrative_rows",
-                    "both_have_narratives",
-                ]
-            ],
-            on="pair_id",
-            how="left",
-        )
-
-    if not global_llm.empty:
-        precedence = precedence.merge(
-            global_llm[["pair_id", "narrative_alignment_note"]].rename(
-                columns={"narrative_alignment_note": "global_narrative_alignment_note"}
-            ),
-            on="pair_id",
-            how="left",
-        )
-    return precedence, join_ready
-
-
 def prepare_selected_lookup(selected_with_narratives: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     all_groups = selected_with_narratives.copy()
     corporate = all_groups.loc[all_groups["source"] == "corporate"].copy()
@@ -251,7 +211,6 @@ def build_master_review(
     included_noncorporate: pd.DataFrame,
     selected_with_narratives: pd.DataFrame,
     corporate_lookup: pd.DataFrame,
-    precedence: pd.DataFrame,
 ) -> pd.DataFrame:
     noncorp_lookup = selected_with_narratives.rename(
         columns={
@@ -312,21 +271,10 @@ def build_master_review(
         how="left",
         validate="many_to_one",
     )
-    master = master.merge(
-        precedence,
-        left_on="best_pair_id",
-        right_on="pair_id",
-        how="left",
-        suffixes=("", "_pair"),
-    )
-
     master["macro_topic"] = master["assigned_label_noncorporate"]
     master["macro_topic_name"] = master["macro_topic_name_noncorporate"]
     master["dyad"] = master["best_dyad"].fillna("").replace("", "manual_override_no_direct_dyad")
     master["narrative_alignment_note"] = master.apply(build_alignment_note, axis=1)
-    if "global_narrative_alignment_note" in master.columns:
-        global_note = master["global_narrative_alignment_note"].fillna("").astype(str).str.strip()
-        master.loc[global_note != "", "narrative_alignment_note"] = global_note[global_note != ""]
     master["review_decision"] = ""
     master["review_notes"] = ""
 
@@ -352,8 +300,6 @@ def build_master_review(
         "overall_summary_corporate",
         *[f"phase_{idx}_years_corporate" for idx in PHASE_NUMBERS],
         "best_cosine_similarity",
-        "precedence_class",
-        "precedence_type_label",
         "narrative_alignment_note",
         "direct_pair_count",
         "best_pair_id",
@@ -664,17 +610,12 @@ def main() -> None:
         review_root=args.review_root,
         stage12_input_root=args.stage12_input_root,
     )
-    precedence, _ = build_pair_metadata(
-        pair_root=args.pair_root,
-        global_llm_pair_root=args.global_llm_pair_root,
-    )
     _, corporate_lookup = prepare_selected_lookup(selected_with_narratives)
 
     master_review = build_master_review(
         included_noncorporate=included_noncorporate,
         selected_with_narratives=selected_with_narratives,
         corporate_lookup=corporate_lookup,
-        precedence=precedence,
     )
     included_linked = master_review.loc[master_review["dyad"] != "manual_override_no_direct_dyad"].copy()
     included_unlinked = master_review.loc[master_review["dyad"] == "manual_override_no_direct_dyad"].copy()

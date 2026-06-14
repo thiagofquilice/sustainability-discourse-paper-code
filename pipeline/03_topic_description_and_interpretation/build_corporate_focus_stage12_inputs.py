@@ -9,8 +9,14 @@ from pathlib import Path
 
 import pandas as pd
 
-from build_micro_topic_evolution_inputs import build_year_evidence
-from micro_topic_evolution_common import SOURCE_ORDER, configure_logging, ensure_directory, read_json, write_json
+from micro_topic_evolution_common import (
+    SOURCE_ORDER,
+    configure_logging,
+    ensure_directory,
+    parse_topic_terms,
+    read_json,
+    write_json,
+)
 from microtopic_posthoc_merge_common import (
     CORPORATE_FOCUS_REVIEW_OUTPUT_ROOT,
     CORPORATE_FOCUS_STAGE12_INPUT_ROOT,
@@ -32,6 +38,94 @@ def write_jsonl(path: Path, frame: pd.DataFrame) -> None:
     with path.open("w", encoding="utf-8") as handle:
         for row in frame.to_dict(orient="records"):
             handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+
+def build_year_evidence(
+    subgroup: str,
+    manifest: dict,
+    selected_topics: pd.DataFrame,
+    topics_over_time: pd.DataFrame,
+    document_topics: pd.DataFrame,
+    max_chunks_per_year: int,
+) -> tuple[list[dict], list[dict]]:
+    """Build topic-level and annual evidence rows for selected microtopics."""
+    yearly_rows: list[dict] = []
+    topic_rows: list[dict] = []
+
+    for _, topic_row in selected_topics.iterrows():
+        topic_id = int(topic_row["Topic"])
+        overall_keywords = parse_topic_terms(topic_row.get("Representation"))
+        topic_years = topics_over_time.loc[topics_over_time["Topic"] == topic_id].copy()
+        topic_years = topic_years.sort_values("Timestamp").reset_index(drop=True)
+        active_years = topic_years["Timestamp"].astype(int).tolist()
+        topic_rows.append(
+            {
+                "subgroup": subgroup,
+                "source": manifest["source"],
+                "assigned_label": manifest["assigned_label"],
+                "macro_topic_name": manifest.get("topic_name"),
+                "micro_topic_id": topic_id,
+                "topic_name_original": str(topic_row["Name"]),
+                "topic_size": int(topic_row["Count"]),
+                "share_of_non_outlier": float(topic_row["share_of_non_outlier"]),
+                "cumulative_share": float(topic_row["cumulative_share"]),
+                "active_year_count": int(len(active_years)),
+                "active_year_min": int(min(active_years)) if active_years else None,
+                "active_year_max": int(max(active_years)) if active_years else None,
+                "overall_keywords": json.dumps(overall_keywords, ensure_ascii=False),
+            }
+        )
+
+        for _, year_row in topic_years.iterrows():
+            year = int(year_row["Timestamp"])
+            year_subset = document_topics.loc[
+                (document_topics["micro_topic_id"] == topic_id) & (document_topics["year"].astype(int) == year)
+            ].copy()
+            year_subset = year_subset.sort_values(
+                ["micro_topic_probability", "chunk_id"], ascending=[False, True]
+            ).head(max_chunks_per_year)
+            chunk_records = []
+            for _, chunk_row in year_subset.iterrows():
+                chunk_records.append(
+                    {
+                        "chunk_id": str(chunk_row["chunk_id"]),
+                        "source_doc_id": str(chunk_row["source_doc_id"]),
+                        "year": int(chunk_row["year"]),
+                        "micro_topic_probability": float(chunk_row["micro_topic_probability"]),
+                        "text": str(chunk_row["text"]),
+                    }
+                )
+
+            yearly_rows.append(
+                {
+                    "subgroup": subgroup,
+                    "source": manifest["source"],
+                    "assigned_label": manifest["assigned_label"],
+                    "macro_topic_name": manifest.get("topic_name"),
+                    "micro_topic_id": topic_id,
+                    "topic_name_original": str(topic_row["Name"]),
+                    "year": year,
+                    "year_frequency": int(year_row["Frequency"]),
+                    "topic_size": int(topic_row["Count"]),
+                    "share_of_non_outlier": float(topic_row["share_of_non_outlier"]),
+                    "year_specific_words": json.dumps(parse_topic_terms(year_row["Words"]), ensure_ascii=False),
+                    "overall_keywords": json.dumps(overall_keywords, ensure_ascii=False),
+                    "available_chunk_count": int(year_subset.shape[0]),
+                    "is_sparse_year": bool(year_subset.shape[0] < max_chunks_per_year),
+                    "chunk_records_json": json.dumps(chunk_records, ensure_ascii=False),
+                    "chunk_id_1": chunk_records[0]["chunk_id"] if len(chunk_records) > 0 else "",
+                    "chunk_id_2": chunk_records[1]["chunk_id"] if len(chunk_records) > 1 else "",
+                    "chunk_id_3": chunk_records[2]["chunk_id"] if len(chunk_records) > 2 else "",
+                    "chunk_id_4": chunk_records[3]["chunk_id"] if len(chunk_records) > 3 else "",
+                    "chunk_id_5": chunk_records[4]["chunk_id"] if len(chunk_records) > 4 else "",
+                    "chunk_text_1": chunk_records[0]["text"] if len(chunk_records) > 0 else "",
+                    "chunk_text_2": chunk_records[1]["text"] if len(chunk_records) > 1 else "",
+                    "chunk_text_3": chunk_records[2]["text"] if len(chunk_records) > 2 else "",
+                    "chunk_text_4": chunk_records[3]["text"] if len(chunk_records) > 3 else "",
+                    "chunk_text_5": chunk_records[4]["text"] if len(chunk_records) > 4 else "",
+                }
+            )
+    return topic_rows, yearly_rows
 
 
 def coalesce_merge_columns(frame: pd.DataFrame, column_name: str) -> pd.DataFrame:

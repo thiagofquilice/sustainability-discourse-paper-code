@@ -33,7 +33,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--excluded-workbook",
         type=Path,
-        default=Path("paper_pipeline/outputs/corporate_focus_excluded_review/excluded_noncorporate_postmerge_review.xlsx"),
+        default=Path("outputs/corporate_focus_excluded_review/excluded_noncorporate_postmerge_review.xlsx"),
     )
     parser.add_argument(
         "--micro-root",
@@ -43,22 +43,22 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--full-review-root",
         type=Path,
-        default=Path("paper_pipeline/outputs/corporate_focus_review_with_overrides"),
+        default=Path("outputs/corporate_focus_review_with_overrides"),
     )
     parser.add_argument(
         "--delta-review-root",
         type=Path,
-        default=Path("paper_pipeline/outputs/corporate_focus_review_override_delta"),
+        default=Path("outputs/corporate_focus_review_override_delta"),
     )
     parser.add_argument(
         "--full-output-root",
         type=Path,
-        default=Path("paper_pipeline/outputs/corporate_focus_stage12_input_with_overrides"),
+        default=Path("outputs/corporate_focus_stage12_input_with_overrides"),
     )
     parser.add_argument(
         "--delta-output-root",
         type=Path,
-        default=Path("paper_pipeline/outputs/corporate_focus_stage12_input_override_delta"),
+        default=Path("outputs/corporate_focus_stage12_input_override_delta"),
     )
     parser.add_argument("--max-chunks-per-year", type=int, default=5)
     parser.add_argument("--log-level", type=str, default="INFO")

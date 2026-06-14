@@ -8,18 +8,13 @@ import json
 from pathlib import Path
 from typing import Any
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from bertopic import BERTopic
-from bertopic.representation import KeyBERTInspired, MaximalMarginalRelevance, PartOfSpeech
-from bertopic.vectorizers import ClassTfidfTransformer
-from sklearn.feature_extraction.text import CountVectorizer
 
 from workflow_common import configure_logging, load_sentence_transformer, read_json
 
 
-WORKFLOW_ROOT = Path("paper_pipeline")
+WORKFLOW_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_INPUT = WORKFLOW_ROOT / "outputs" / "full_run" / "adjusted_with_t2_secondary_recovery" / "adjusted_full_yes.csv"
 DEFAULT_OUTPUT_ROOT = WORKFLOW_ROOT / "outputs" / "bertopic_micro_unsupervised_multiaspect"
 DEFAULT_EMBEDDING_FILE = Path("data/external/filtered_embeddings.f32")
@@ -78,6 +73,8 @@ def parse_topic_terms(value: Any) -> list[str]:
 
 
 def plot_heatmap(data: pd.DataFrame, title: str, cbar_label: str, output_base: Path, footnote: str, cmap: str) -> None:
+    import matplotlib.pyplot as plt
+
     fig, ax = plt.subplots(figsize=(8, 3.8))
     matrix = data.fillna(0.0).to_numpy()
     im = ax.imshow(matrix, aspect="auto", cmap=cmap)
@@ -113,6 +110,8 @@ def subgroup_min_topic_size(n_rows: int) -> int:
 
 
 def build_representation_model() -> dict[str, Any]:
+    from bertopic.representation import KeyBERTInspired, MaximalMarginalRelevance, PartOfSpeech
+
     main_representation = KeyBERTInspired()
     aspect_model1 = PartOfSpeech(SPACY_MODEL_NAME)
     aspect_model2 = [KeyBERTInspired(top_n_words=30), MaximalMarginalRelevance(diversity=0.5)]
@@ -123,7 +122,11 @@ def build_representation_model() -> dict[str, Any]:
     }
 
 
-def build_model(n_rows: int, embedding_model_backend: Any) -> BERTopic:
+def build_model(n_rows: int, embedding_model_backend: Any):
+    from bertopic import BERTopic
+    from bertopic.vectorizers import ClassTfidfTransformer
+    from sklearn.feature_extraction.text import CountVectorizer
+
     vectorizer = CountVectorizer(stop_words="english", min_df=1, max_df=0.95)
     ctfidf_model = ClassTfidfTransformer(reduce_frequent_words=True)
     return BERTopic(

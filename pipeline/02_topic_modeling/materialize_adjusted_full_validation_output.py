@@ -10,7 +10,7 @@ from pathlib import Path
 import pandas as pd
 
 
-WORKFLOW_ROOT = Path("paper_pipeline")
+WORKFLOW_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_FULL_OUTPUT = WORKFLOW_ROOT / "outputs" / "full_run" / "best_only" / "validation_output.csv"
 DEFAULT_BEST_ONLY_POSITIVE = WORKFLOW_ROOT / "outputs" / "cosine" / "best_only_positive.parquet"
 DEFAULT_REMAP_FILE = WORKFLOW_ROOT / "outputs" / "t2_secondary_recovery_cosine_round" / "old_t2_under_secondary_recovery_variant.parquet"

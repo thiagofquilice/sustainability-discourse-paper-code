@@ -11,19 +11,17 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
-import torch
-from sentence_transformers import SentenceTransformer
 
 
 LOGGER = logging.getLogger("supervised_bertopic")
-WORKFLOW_ROOT = Path(__file__).resolve().parents[1]
-CONFIG_PATH = WORKFLOW_ROOT / "config" / "main_config.json"
+WORKFLOW_ROOT = Path(__file__).resolve().parents[2]
+CONFIG_PATH = WORKFLOW_ROOT / "config" / "paper_6topic_pipeline_config.json"
 DEFAULT_PROJECT_REPO = Path("data/external/project_repo")
 DEFAULT_SUBSET_ROOT = (
     DEFAULT_PROJECT_REPO / "data" / "results" / "subsets" / "corporate_oil_gas_metal_mining"
 )
-DEFAULT_LABEL_SOURCE_CSV = WORKFLOW_ROOT / "1_Labels" / "bertopic_supervised_labels.csv"
-DEFAULT_LABEL_SOURCE_JSON = WORKFLOW_ROOT / "1_Labels" / "bertopic_supervised_labels.json"
+DEFAULT_LABEL_SOURCE_CSV = WORKFLOW_ROOT / "catalog" / "six_topic_discourse_catalog.csv"
+DEFAULT_LABEL_SOURCE_JSON = WORKFLOW_ROOT / "catalog" / "six_topic_discourse_catalog.json"
 REQUIRED_LABEL_COLUMNS = [
     "label_id",
     "label_code",
@@ -71,7 +69,8 @@ def load_config(config_path: Path | None = None) -> dict[str, Any]:
     path = config_path or CONFIG_PATH
     if not path.exists():
         raise FileNotFoundError(
-            f"Workflow config not found at {path}. Run scripts/prepare_inputs.py first."
+            f"Workflow config not found at {path}. Copy config/paper_6topic_pipeline_config.example.json "
+            "to config/paper_6topic_pipeline_config.json and set local external-data paths."
         )
     return read_json(path)
 
@@ -164,6 +163,8 @@ def resolve_local_snapshot(model_name: str) -> Path | None:
 
 
 def embedding_device() -> str:
+    import torch
+
     if torch.cuda.is_available():
         return "cuda"
     if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
@@ -171,7 +172,9 @@ def embedding_device() -> str:
     return "cpu"
 
 
-def load_sentence_transformer(model_name: str) -> SentenceTransformer:
+def load_sentence_transformer(model_name: str):
+    from sentence_transformers import SentenceTransformer
+
     local_snapshot = resolve_local_snapshot(model_name)
     load_target = str(local_snapshot) if local_snapshot is not None else model_name
     local_files_only = local_snapshot is not None

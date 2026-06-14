@@ -16,16 +16,10 @@ from micro_topic_evolution_common import is_stage2_narrative_ready
 
 
 LOGGER = logging.getLogger("cross_source_microtopics")
-WORKFLOW_ROOT = Path("paper_pipeline")
+WORKFLOW_ROOT = Path(__file__).resolve().parents[2]
 MICRO_ROOT = WORKFLOW_ROOT / "outputs" / "bertopic_micro_unsupervised"
 OUTPUT_ROOT = WORKFLOW_ROOT / "outputs" / "microtopic_cross_source_pairs"
 DEFAULT_THRESHOLD_065_OUTPUT_ROOT = WORKFLOW_ROOT / "outputs" / "microtopic_cross_source_pairs_threshold_065"
-DEFAULT_DISCOURSE_FUNCTION_OUTPUT_ROOT = (
-    WORKFLOW_ROOT / "outputs" / "microtopic_same_issue_discourse_function_top2_threshold055"
-)
-DEFAULT_DISCOURSE_FUNCTION_WITH_ACADEMIC_MEDIA_OUTPUT_ROOT = (
-    WORKFLOW_ROOT / "outputs" / "microtopic_same_issue_discourse_function_top2_threshold055_with_academic_media"
-)
 YEAR_SUMMARIES_PATH = (
     WORKFLOW_ROOT / "outputs" / "bertopic_micro_evolution" / "year_summaries" / "micro_topic_year_summaries.csv"
 )
@@ -44,33 +38,7 @@ DYAD_LABELS = {
     ("media", "corporate"): "media ↔ corporate",
     ("academic", "corporate"): "academic ↔ corporate",
 }
-DISCOURSE_DYADS: list[tuple[str, str]] = [("media", "corporate"), ("academic", "corporate"), ("academic", "media")]
-DISCOURSE_DYAD_LABELS = {
-    ("media", "corporate"): "media ↔ corporate",
-    ("academic", "corporate"): "academic ↔ corporate",
-    ("academic", "media"): "academic ↔ media",
-}
 SIMILARITY_THRESHOLDS = [0.65, 0.70, 0.75, 0.80]
-TEMPORAL_RULES = {
-    "lenient": {
-        "min_active_years_per_side": 3,
-        "min_overlap_years": 3,
-        "min_docs_per_side": 5,
-        "min_chunks_per_side": 10,
-    },
-    "balanced": {
-        "min_active_years_per_side": 4,
-        "min_overlap_years": 4,
-        "min_docs_per_side": 10,
-        "min_chunks_per_side": 20,
-    },
-    "strict": {
-        "min_active_years_per_side": 5,
-        "min_overlap_years": 5,
-        "min_docs_per_side": 20,
-        "min_chunks_per_side": 40,
-    },
-}
 
 
 def configure_logging(log_level: str = "INFO") -> None:
@@ -230,14 +198,6 @@ def load_stage1_enrichment(path: Path = YEAR_SUMMARIES_PATH) -> pd.DataFrame:
     grouped["stage1_frame_examples_json"] = grouped["stage1_frame_examples"].map(json_dumps)
     return grouped.drop(columns=["stage1_focus_primary_examples", "stage1_frame_examples"])
 
-
-def variance_flag(values: list[float]) -> bool:
-    if len(values) < 2:
-        return True
-    arr = np.asarray(values, dtype="float64")
-    if np.allclose(arr, arr[0]):
-        return True
-    return float(np.nanstd(arr)) == 0.0
 
 
 def load_stage2_narratives(path: Path = EVOLUTION_NARRATIVES_PATH) -> pd.DataFrame:

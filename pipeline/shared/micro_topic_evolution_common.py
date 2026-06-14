@@ -14,7 +14,7 @@ import pandas as pd
 
 
 LOGGER = logging.getLogger("micro_topic_evolution")
-WORKFLOW_ROOT = Path("paper_pipeline")
+WORKFLOW_ROOT = Path(__file__).resolve().parents[2]
 MICRO_ROOT = WORKFLOW_ROOT / "outputs" / "bertopic_micro_unsupervised"
 OUTPUT_ROOT = WORKFLOW_ROOT / "outputs" / "bertopic_micro_evolution"
 SOURCE_ORDER = ["academic", "media", "corporate"]

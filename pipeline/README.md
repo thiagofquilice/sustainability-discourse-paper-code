@@ -1,10 +1,9 @@
 # Pipeline Scripts
 
-Scripts are grouped by the final paper workflow stage. The grouping is intended
-for reading and review. Some scripts were originally run from a larger project
-workspace and may require local path configuration before execution.
+This folder contains only the retained Chapter 4 route scripts. Use the repository root as the working directory and set:
 
-For a stage-by-stage index, see `../manifests/script_manifest.csv`.
+```bash
+PYTHONPATH=pipeline/shared
+```
 
-Shared helper modules are in `shared/`.
-
+The retained folders correspond to domain assignment and BERTopic (`02_topic_modeling`), Colab/Gemma temporal synthesis (`03_topic_description_and_interpretation`), corporate-centered review (`04_classification_and_review`), minimal cross-source matching prerequisites (`05_cross_source_comparison`), and shared helpers (`shared`).

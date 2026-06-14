@@ -14,7 +14,7 @@ from pathlib import Path
 import pandas as pd
 
 
-PIPELINE_ROOT = Path("paper_pipeline")
+PIPELINE_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_BUNDLE_ROOT = PIPELINE_ROOT / "outputs" / "corporate_focus_stage12_colab_drive_with_overrides"
 DEFAULT_OUTPUTS_DIR = DEFAULT_BUNDLE_ROOT / "colab_outputs"
 DEFAULT_ARCHIVE_DIR = DEFAULT_BUNDLE_ROOT / "restored_download_archives"
