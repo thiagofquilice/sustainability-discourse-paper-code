@@ -25,6 +25,7 @@ from microtopic_posthoc_merge_common import (
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
+TEMPORAL_SCRIPT_DIR = SCRIPT_DIR.parent / "03_topic_description_and_interpretation"
 
 
 def parse_args() -> argparse.Namespace:
@@ -176,8 +177,8 @@ def write_review_root(
     )
 
 
-def run_script(script_name: str, args: list[str]) -> None:
-    cmd = [sys.executable, str(SCRIPT_DIR / script_name), *args]
+def run_script(script_name: str, args: list[str], script_dir: Path = SCRIPT_DIR) -> None:
+    cmd = [sys.executable, str(script_dir / script_name), *args]
     print(f"[override-packages] running: {' '.join(cmd)}")
     subprocess.run(cmd, check=True)
 
@@ -230,6 +231,7 @@ def main() -> None:
             "--log-level",
             args.log_level,
         ],
+        script_dir=TEMPORAL_SCRIPT_DIR,
     )
     run_script(
         "build_corporate_focus_colab_package.py",
@@ -239,6 +241,7 @@ def main() -> None:
             "--zip-name",
             "corporate_focus_stage12_input_with_overrides_upload.zip",
         ],
+        script_dir=TEMPORAL_SCRIPT_DIR,
     )
 
     run_script(
@@ -255,6 +258,7 @@ def main() -> None:
             "--log-level",
             args.log_level,
         ],
+        script_dir=TEMPORAL_SCRIPT_DIR,
     )
     run_script(
         "build_corporate_focus_colab_package.py",
@@ -264,6 +268,7 @@ def main() -> None:
             "--zip-name",
             "corporate_focus_stage12_input_override_delta_upload.zip",
         ],
+        script_dir=TEMPORAL_SCRIPT_DIR,
     )
 
     write_json(

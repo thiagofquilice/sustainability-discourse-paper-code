@@ -65,6 +65,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-rows", type=int, default=None)
     parser.add_argument("--max-new-tokens", type=int, default=1)
     parser.add_argument("--trust-remote-code", action="store_true", default=False)
+    parser.add_argument(
+        "--device",
+        choices=["cuda", "cpu", "auto"],
+        default="cuda",
+        help="Execution device. Default cuda preserves the historical Colab route; cpu is for small smoke tests only.",
+    )
     parser.add_argument("--require-gpu", action="store_true", default=True)
     parser.add_argument("--input-format", choices=["auto", "csv", "json", "jsonl", "parquet"], default="auto")
     parser.add_argument("--mirror-output-dir", type=Path, default=None)
@@ -151,25 +157,41 @@ def load_model_and_tokenizer(args: argparse.Namespace):
 
     hardware = detect_hardware()
     hardware["transformers_version"] = transformers.__version__
-    if args.require_gpu and not hardware["cuda_available"]:
+    requested_device = args.device
+    execution_device = "cuda" if requested_device == "auto" and hardware["cuda_available"] else requested_device
+    if execution_device == "auto":
+        execution_device = "cpu"
+    hardware["requested_device"] = requested_device
+    hardware["execution_device"] = execution_device
+    if execution_device == "cuda" and args.require_gpu and not hardware["cuda_available"]:
         raise RuntimeError("No CUDA GPU detected in the runtime. This runner is intended for Colab GPU use.")
 
-    quantization_config = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_quant_type="nf4",
-        bnb_4bit_use_double_quant=True,
-        bnb_4bit_compute_dtype=torch.float16,
-    )
     tokenizer = AutoTokenizer.from_pretrained(args.model_name, trust_remote_code=args.trust_remote_code)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "left"
-    model = AutoModelForCausalLM.from_pretrained(
-        args.model_name,
-        device_map="auto",
-        quantization_config=quantization_config,
-        trust_remote_code=args.trust_remote_code,
-    )
+    if execution_device == "cpu":
+        hardware["quantization"] = "none"
+        model = AutoModelForCausalLM.from_pretrained(
+            args.model_name,
+            torch_dtype=torch.float32,
+            trust_remote_code=args.trust_remote_code,
+        )
+        model.to("cpu")
+    else:
+        quantization_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_use_double_quant=True,
+            bnb_4bit_compute_dtype=torch.float16,
+        )
+        hardware["quantization"] = "bitsandbytes_4bit_nf4"
+        model = AutoModelForCausalLM.from_pretrained(
+            args.model_name,
+            device_map="auto",
+            quantization_config=quantization_config,
+            trust_remote_code=args.trust_remote_code,
+        )
     model.eval()
     return model, tokenizer, hardware
 

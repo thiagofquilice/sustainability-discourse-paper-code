@@ -40,7 +40,7 @@ Copy the example configuration and edit the local paths when needed.
 cp config/paper_6topic_pipeline_config.example.json config/paper_6topic_pipeline_config.json
 ```
 
-The Gemma stages require access to the model on Hugging Face and a compatible GPU runtime. The runners use `AutoModelForCausalLM` with tokenizer chat templates and 4-bit loading. CPU only readers can run the preparation, assignment, review, and most downstream materialization steps with a small corpus, although embedding and BERTopic execution will be slower.
+The Gemma stages require access to the model on Hugging Face and a compatible GPU runtime for full runs. The historical route uses `AutoModelForCausalLM` with tokenizer chat templates and 4-bit loading on CUDA. CPU only readers can run the preparation, assignment, review, and most downstream materialization steps with a small corpus, although embedding and BERTopic execution will be slower. The Gemma runners also expose `--device cpu` for explicit smoke tests with the same model and prompts; CPU mode disables BitsAndBytes quantization and is not intended for full-corpus generation.
 
 ## Prepared corpus schema
 
@@ -66,7 +66,7 @@ Corpus row order must remain stable between embedding creation and domain assign
 | 2 | Assign chunks to the six domains | `pipeline/02_topic_modeling/run_6topic_discourse_cosine.py` | Local config and embeddings |
 | 3 | Validate provisional assignments | `pipeline/02_topic_modeling/run_hf_gemma_domain_validation_colab.py` | Hugging Face model access and a GPU |
 | 4 | Materialize the validated corpus | `pipeline/02_topic_modeling/materialize_adjusted_full_validation_output.py` | Validation output and optional study specific T2 adjustment inputs |
-| 5 | Fit the 18 source and domain BERTopic models | `pipeline/02_topic_modeling/run_6topic_micro_unsupervised.py` | Validated corpus, embeddings, and `en_core_web_sm` |
+| 5 | Fit and save the 18 source and domain BERTopic models | `pipeline/02_topic_modeling/run_6topic_micro_unsupervised.py` | Validated corpus, embeddings, and `en_core_web_sm` |
 | 6 | Prepare and materialize topic merge review | `pipeline/02_topic_modeling/build_microtopic_merge_review_workbook.py` and `pipeline/02_topic_modeling/materialize_microtopic_group_review_mapping.py` | Human review of the workbook |
 | 7 | Build the reviewed merged microtopic root | `pipeline/02_topic_modeling/build_merged_microtopic_root.py` | Reviewed mapping |
 | 8 | Build, embed, and compare cross source profiles | Scripts in `pipeline/05_cross_source_comparison` | Sentence transformer model |

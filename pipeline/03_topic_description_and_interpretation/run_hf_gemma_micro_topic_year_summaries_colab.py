@@ -69,6 +69,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--batch-size", type=int, default=6)
     parser.add_argument("--save-every", type=int, default=20)
     parser.add_argument("--max-new-tokens", type=int, default=320)
+    parser.add_argument(
+        "--device",
+        choices=["cuda", "cpu", "auto"],
+        default="cuda",
+        help="Execution device. Default cuda preserves the historical Colab route; cpu is for small smoke tests only.",
+    )
     parser.add_argument("--resume", action="store_true", default=True)
     parser.add_argument("--max-rows", type=int, default=None)
     return parser.parse_args()
@@ -163,32 +169,49 @@ def load_model_and_tokenizer(args: argparse.Namespace):
     import transformers
     from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
-    if not torch.cuda.is_available():
+    cuda_available = bool(torch.cuda.is_available())
+    requested_device = args.device
+    execution_device = "cuda" if requested_device == "auto" and cuda_available else requested_device
+    if execution_device == "auto":
+        execution_device = "cpu"
+    if execution_device == "cuda" and not cuda_available:
         raise RuntimeError("No CUDA GPU detected. Use a Colab GPU runtime.")
 
-    quantization_config = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_quant_type="nf4",
-        bnb_4bit_use_double_quant=True,
-        bnb_4bit_compute_dtype=torch.float16,
-    )
     tokenizer = AutoTokenizer.from_pretrained(args.model_name)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "left"
-    model = AutoModelForCausalLM.from_pretrained(
-        args.model_name,
-        device_map="auto",
-        quantization_config=quantization_config,
-    )
+    if execution_device == "cpu":
+        model = AutoModelForCausalLM.from_pretrained(
+            args.model_name,
+            torch_dtype=torch.float32,
+        )
+        model.to("cpu")
+        quantization = "none"
+    else:
+        quantization_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_use_double_quant=True,
+            bnb_4bit_compute_dtype=torch.float16,
+        )
+        model = AutoModelForCausalLM.from_pretrained(
+            args.model_name,
+            device_map="auto",
+            quantization_config=quantization_config,
+        )
+        quantization = "bitsandbytes_4bit_nf4"
     model.eval()
     hardware = {
         "python_version": platform.python_version(),
         "platform": platform.platform(),
         "transformers_version": transformers.__version__,
-        "cuda_available": True,
-        "gpu_name": torch.cuda.get_device_name(0),
+        "cuda_available": cuda_available,
+        "gpu_name": torch.cuda.get_device_name(0) if cuda_available else None,
         "gpu_count": int(torch.cuda.device_count()),
+        "requested_device": requested_device,
+        "execution_device": execution_device,
+        "quantization": quantization,
     }
     hardware["model_loader"] = "AutoModelForCausalLM"
     return model, tokenizer, hardware

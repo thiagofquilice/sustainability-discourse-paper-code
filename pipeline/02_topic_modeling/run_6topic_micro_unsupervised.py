@@ -376,6 +376,7 @@ def build_summary_outputs(output_root: Path) -> None:
         },
     }
     (summary_dir / "manifest.json").write_text(json.dumps(summary_manifest, indent=2), encoding="utf-8")
+    (output_root / "manifest.json").write_text(json.dumps(summary_manifest, indent=2), encoding="utf-8")
 
 
 def main() -> None:
@@ -517,6 +518,25 @@ def main() -> None:
             except Exception:
                 pass
 
+            model_dir = subgroup_dir / "bertopic_model"
+            model_save_status = "not_attempted"
+            try:
+                model.save(
+                    str(model_dir),
+                    serialization="safetensors",
+                    save_ctfidf=True,
+                    save_embedding_model=False,
+                )
+                model_save_status = "written_safetensors"
+            except Exception as exc:  # noqa: BLE001
+                fallback_dir = subgroup_dir / "bertopic_model_pickle"
+                try:
+                    model.save(str(fallback_dir), serialization="pickle")
+                    model_dir = fallback_dir
+                    model_save_status = f"written_pickle_after_safetensors_failed: {exc}"
+                except Exception as fallback_exc:  # noqa: BLE001
+                    model_save_status = f"failed: {exc}; pickle_fallback_failed: {fallback_exc}"
+
             outlier_share = float((subset["micro_topic_id"] == -1).mean())
             largest_topic_size = int(valid_topic_info["Count"].max()) if not valid_topic_info.empty else 0
             n_topics_found = int(valid_topic_info["Topic"].nunique())
@@ -543,6 +563,8 @@ def main() -> None:
                 "representation_embedding_model": representation_embedding_model_name,
                 "topic_aspects_json": str(subgroup_dir / "topic_aspects.json"),
                 "topic_aspects_csv": str(subgroup_dir / "topic_aspects.csv"),
+                "model_dir": str(model_dir),
+                "model_save_status": model_save_status,
             }
             (subgroup_dir / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
             subgroup_manifests.append(manifest)

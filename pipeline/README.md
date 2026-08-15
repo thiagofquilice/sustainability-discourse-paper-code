@@ -6,6 +6,7 @@ The retained folders correspond to domain assignment and BERTopic (`02_topic_mod
 
 Implementation notes:
 - `01_data_preparation/embed_corpus.py` creates normalized corpus embeddings required by domain assignment.
-- `02_topic_modeling/run_hf_gemma_domain_validation_colab.py` uses `AutoModelForCausalLM` for binary relevance validation.
+- `02_topic_modeling/run_hf_gemma_domain_validation_colab.py` uses `AutoModelForCausalLM` for binary relevance validation; `--device cpu` is available for small smoke tests only.
 - `02_topic_modeling/materialize_adjusted_full_validation_output.py` provides the Chapter 4 T2 secondary recovery route and `generic_no_t2_recovery` for a new corpus.
+- `02_topic_modeling/run_6topic_micro_unsupervised.py` writes per-subgroup BERTopic outputs and saved model directories.
 - Corporate-focus review defaults to initial `0.60`, with `0.65` recorded as the primary reference threshold and not as a sole automatic selection rule.

@@ -53,6 +53,19 @@ python pipeline/02_topic_modeling/run_hf_gemma_domain_validation_colab.py \
 
 The script uses `AutoModelForCausalLM`, 4-bit quantization, deterministic decoding, and a binary prompt. It records `v_gemma` and an error log. Malformed responses are written to the error log rather than silently converted.
 
+For a CPU smoke test on a few rows, keep the same model and prompt but request CPU explicitly and use batch size 1. This disables BitsAndBytes quantization and is not intended for a full validation run.
+
+```bash
+python pipeline/02_topic_modeling/run_hf_gemma_domain_validation_colab.py \
+  --input-path outputs/cosine/best_only_positive.parquet \
+  --output-path outputs/validation_smoke/validation_output.csv \
+  --model-name google/gemma-4-E4B-it \
+  --device cpu \
+  --batch-size 1 \
+  --max-rows 6 \
+  --max-new-tokens 1
+```
+
 ## Stage 4 validated modeling corpus
 
 ```bash
@@ -77,6 +90,7 @@ python pipeline/02_topic_modeling/run_6topic_micro_unsupervised.py \
 ```
 
 The script fits one model for every nonempty source and domain subgroup. Topic `-1` remains an outlier and does not enter later review.
+Each completed subgroup writes `document_topics`, `topic_info`, topic-aspect files, and a saved BERTopic model directory. The summary manifest is written both to `outputs/bertopic_micro_unsupervised_multiaspect/summary/manifest.json` and to `outputs/bertopic_micro_unsupervised_multiaspect/manifest.json`.
 
 ## Stage 6 human merge review
 
@@ -161,6 +175,8 @@ python pipeline/03_topic_description_and_interpretation/build_corporate_focus_dr
 ```
 
 The two Gemma runners inside `pipeline/03_topic_description_and_interpretation` execute annual summaries and temporal evolution synthesis with `AutoModelForCausalLM`. Their defaults are Stage 1 `batch_size=6`, `save_every=20`, `max_new_tokens=320`, and Stage 2 `max_new_tokens=650`, `max_attempts=4`. They require model access and a GPU. The Drive bundle builder packages those runners and their inputs for Colab.
+
+For CPU smoke tests only, pass `--device cpu` and a small `--max-rows` value to the annual runner, and `--device cpu --max-rows 1` to the evolution runner. CPU mode preserves the same prompts and `AutoModelForCausalLM` loader but disables BitsAndBytes quantization.
 
 ## Stage 10 post synthesis hybrid review
 
