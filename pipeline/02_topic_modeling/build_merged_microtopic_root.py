@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ruff: noqa: E402
 """Materialize a merged canonical microtopic root from approved within-subgroup mappings."""
 
 from __future__ import annotations
@@ -6,21 +7,25 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import sys
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
 
+SHARED_DIR = Path(__file__).resolve().parents[1] / "shared"
+if str(SHARED_DIR) not in sys.path:
+    sys.path.insert(0, str(SHARED_DIR))
+
 from cross_source_microtopic_common import configure_logging
 from microtopic_posthoc_merge_common import (
-    MERGED_MICRO_ROOT,
-    MERGE_FIRST_HIERARCHICAL_REVIEW_OUTPUT_ROOT,
+    MERGED_MICRO_ROOT_MULTIASPECT_REVIEWED,
+    MERGE_FIRST_GROUP_REVIEW_MULTIASPECT_OUTPUT_ROOT,
     RAW_MICRO_ROOT,
     ensure_directory,
     json_dumps,
     normalize_text,
     parse_json_list,
-    safe_read_csv,
     write_json,
 )
 
@@ -35,9 +40,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--mapping-csv",
         type=Path,
-        default=MERGE_FIRST_HIERARCHICAL_REVIEW_OUTPUT_ROOT / "microtopic_to_merged_group.csv",
+        default=MERGE_FIRST_GROUP_REVIEW_MULTIASPECT_OUTPUT_ROOT / "microtopic_to_merged_group.csv",
     )
-    parser.add_argument("--output-root", type=Path, default=MERGED_MICRO_ROOT)
+    parser.add_argument(
+        "--output-root",
+        type=Path,
+        default=MERGED_MICRO_ROOT_MULTIASPECT_REVIEWED,
+    )
     parser.add_argument("--max-representative-chunks", type=int, default=5)
     parser.add_argument("--log-level", type=str, default="INFO")
     return parser.parse_args()

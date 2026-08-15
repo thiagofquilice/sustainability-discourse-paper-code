@@ -11,12 +11,10 @@ import pandas as pd
 
 
 WORKFLOW_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_FULL_OUTPUT = WORKFLOW_ROOT / "outputs" / "full_run" / "best_only" / "validation_output.csv"
+DEFAULT_FULL_OUTPUT = WORKFLOW_ROOT / "outputs" / "validation" / "validation_output.csv"
 DEFAULT_BEST_ONLY_POSITIVE = WORKFLOW_ROOT / "outputs" / "cosine" / "best_only_positive.parquet"
-DEFAULT_REMAP_FILE = WORKFLOW_ROOT / "outputs" / "t2_secondary_recovery_cosine_round" / "old_t2_under_secondary_recovery_variant.parquet"
-DEFAULT_CHANGED_GEMMA = WORKFLOW_ROOT / "outputs" / "t2_secondary_recovery_cosine_round" / "gemma_local_full" / "validation_output.csv"
 DEFAULT_CATALOG = WORKFLOW_ROOT / "catalog" / "six_topic_discourse_catalog.csv"
-DEFAULT_OUTPUT_DIR = WORKFLOW_ROOT / "outputs" / "full_run" / "adjusted_with_t2_secondary_recovery"
+DEFAULT_OUTPUT_DIR = WORKFLOW_ROOT / "outputs" / "validation" / "adjusted"
 
 
 REFRESH_FROM_CATALOG_COLUMNS = [
@@ -33,8 +31,18 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--full-output", type=Path, default=DEFAULT_FULL_OUTPUT)
     parser.add_argument("--best-only-positive", type=Path, default=DEFAULT_BEST_ONLY_POSITIVE)
-    parser.add_argument("--remap-file", type=Path, default=DEFAULT_REMAP_FILE)
-    parser.add_argument("--changed-gemma", type=Path, default=DEFAULT_CHANGED_GEMMA)
+    parser.add_argument(
+        "--remap-file",
+        type=Path,
+        default=None,
+        help="Optional study-specific T2 remapping table. Requires --changed-gemma.",
+    )
+    parser.add_argument(
+        "--changed-gemma",
+        type=Path,
+        default=None,
+        help="Optional validation output for remapped T2 rows. Requires --remap-file.",
+    )
     parser.add_argument("--catalog", type=Path, default=DEFAULT_CATALOG)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     return parser.parse_args()
@@ -67,6 +75,12 @@ def enrich_from_best_only(frame: pd.DataFrame, best_only_positive: pd.DataFrame)
     merge_cols = ["chunk_id", *extra_cols]
     enriched = frame.merge(best_only_positive[merge_cols], on="chunk_id", how="left")
     return enriched
+
+
+def read_table(path: Path) -> pd.DataFrame:
+    if path.suffix.lower() == ".parquet":
+        return pd.read_parquet(path)
+    return pd.read_csv(path, low_memory=False)
 
 
 def refresh_topic_columns(frame: pd.DataFrame, catalog: pd.DataFrame) -> pd.DataFrame:
@@ -151,20 +165,34 @@ def main() -> None:
     args = parse_args()
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
-    full = pd.read_csv(args.full_output)
+    if (args.remap_file is None) != (args.changed_gemma is None):
+        raise SystemExit("--remap-file and --changed-gemma must be supplied together.")
+
+    full = read_table(args.full_output)
     best_only_positive = pd.read_parquet(args.best_only_positive)
-    remap = pd.read_parquet(args.remap_file)
-    changed_gemma = pd.read_csv(args.changed_gemma)
     catalog = load_catalog(args.catalog)
 
     full_enriched = enrich_from_best_only(full, best_only_positive)
-    changed_gemma_enriched = enrich_from_best_only(changed_gemma, best_only_positive)
-    changed_chunk_ids = set(changed_gemma_enriched["chunk_id"].astype(str))
-    remap = remap.loc[remap["chunk_id"].astype(str).isin(changed_chunk_ids | set(full_enriched["chunk_id"].astype(str)))].copy()
-
-    adjusted, manifest = materialize_adjusted(full_enriched, remap, changed_gemma_enriched)
+    if args.remap_file is not None and args.changed_gemma is not None:
+        remap = read_table(args.remap_file)
+        changed_gemma = read_table(args.changed_gemma)
+        changed_gemma_enriched = enrich_from_best_only(changed_gemma, best_only_positive)
+        changed_chunk_ids = set(changed_gemma_enriched["chunk_id"].astype(str))
+        relevant_chunk_ids = changed_chunk_ids | set(full_enriched["chunk_id"].astype(str))
+        remap = remap.loc[remap["chunk_id"].astype(str).isin(relevant_chunk_ids)].copy()
+        adjusted, manifest = materialize_adjusted(full_enriched, remap, changed_gemma_enriched)
+        manifest["adjustment_mode"] = "t2_secondary_recovery"
+    else:
+        adjusted = full_enriched.copy()
+        manifest = {
+            "full_rows_original": int(len(full_enriched)),
+            "adjusted_rows": int(len(adjusted)),
+            "adjustment_mode": "validated_assignments_without_study_specific_remap",
+        }
     adjusted = refresh_topic_columns(adjusted, catalog)
 
+    if "v_gemma" not in adjusted.columns:
+        raise SystemExit("Validation output is missing the required v_gemma column.")
     yes_frame = adjusted.loc[adjusted["v_gemma"].astype(str).str.lower() == "yes"].copy().reset_index(drop=True)
 
     adjusted_csv = args.output_dir / "adjusted_full_validation_output.csv"

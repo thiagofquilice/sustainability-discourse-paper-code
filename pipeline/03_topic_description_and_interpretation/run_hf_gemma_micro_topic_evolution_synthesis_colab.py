@@ -296,10 +296,10 @@ def is_stage2_narrative_ready(payload: dict[str, Any]) -> bool:
     return not stage2_missing_core_fields(payload)
 
 
-def load_model_and_tokenizer(args: argparse.Namespace):
+def load_model_and_processor(args: argparse.Namespace):
     import torch
     import transformers
-    from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+    from transformers import AutoModelForMultimodalLM, AutoProcessor, BitsAndBytesConfig
 
     if not torch.cuda.is_available():
         raise RuntimeError("No CUDA GPU detected. Use a Colab GPU runtime.")
@@ -310,13 +310,12 @@ def load_model_and_tokenizer(args: argparse.Namespace):
         bnb_4bit_use_double_quant=True,
         bnb_4bit_compute_dtype=torch.float16,
     )
-    tokenizer = AutoTokenizer.from_pretrained(args.model_name)
-    if tokenizer.pad_token is None:
-        tokenizer.pad_token = tokenizer.eos_token
-    tokenizer.padding_side = "left"
-    model = AutoModelForCausalLM.from_pretrained(
+    processor = AutoProcessor.from_pretrained(args.model_name)
+    processor.tokenizer.padding_side = "left"
+    model = AutoModelForMultimodalLM.from_pretrained(
         args.model_name,
         device_map="auto",
+        dtype="auto",
         quantization_config=quantization_config,
     )
     model.eval()
@@ -328,29 +327,28 @@ def load_model_and_tokenizer(args: argparse.Namespace):
         "gpu_name": torch.cuda.get_device_name(0),
         "gpu_count": int(torch.cuda.device_count()),
     }
-    return model, tokenizer, hardware
+    return model, processor, hardware
 
 
-def generate_one(model, tokenizer, prompt: str, args: argparse.Namespace) -> str:
-    rendered = tokenizer.apply_chat_template(
+def generate_one(model, processor, prompt: str, args: argparse.Namespace) -> str:
+    rendered = processor.apply_chat_template(
         [{"role": "user", "content": prompt}],
         tokenize=False,
         add_generation_prompt=True,
+        enable_thinking=False,
     )
-    inputs = tokenizer(rendered, return_tensors="pt", truncation=True)
-    input_ids = inputs["input_ids"].to(model.device)
-    attention_mask = inputs["attention_mask"].to(model.device)
+    inputs = processor(text=rendered, return_tensors="pt", truncation=True)
+    inputs = {key: value.to(model.device) for key, value in inputs.items()}
+    input_ids = inputs["input_ids"]
     generated = model.generate(
-        input_ids=input_ids,
-        attention_mask=attention_mask,
+        **inputs,
         max_new_tokens=args.max_new_tokens,
         do_sample=False,
         use_cache=True,
-        pad_token_id=tokenizer.pad_token_id,
-        eos_token_id=tokenizer.eos_token_id,
+        pad_token_id=processor.tokenizer.pad_token_id,
     )
     new_tokens = generated[0, input_ids.shape[1]:]
-    return tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
+    return processor.decode(new_tokens, skip_special_tokens=True).strip()
 
 
 def main() -> None:
@@ -378,7 +376,7 @@ def main() -> None:
     pending = pending.reset_index(drop=True)
 
     print_log(f"Input rows={len(selected)} pending_rows={len(pending)} completed_rows={len(completed)}")
-    model, tokenizer, hardware = load_model_and_tokenizer(args)
+    model, processor, hardware = load_model_and_processor(args)
     print_log(f"Loaded model={args.model_name} gpu={hardware['gpu_name']}")
 
     error_rows: list[dict[str, Any]] = []
@@ -411,7 +409,7 @@ def main() -> None:
                 build_ultra_minimal_retry_prompt(prompt),
             ]
             for attempt_idx, attempt_prompt in enumerate(prompts[: args.max_attempts], start=1):
-                raw_response = sanitize_model_output(generate_one(model, tokenizer, attempt_prompt, args))
+                raw_response = sanitize_model_output(generate_one(model, processor, attempt_prompt, args))
                 try:
                     parsed = extract_json_object(raw_response)
                     if not isinstance(parsed, dict):

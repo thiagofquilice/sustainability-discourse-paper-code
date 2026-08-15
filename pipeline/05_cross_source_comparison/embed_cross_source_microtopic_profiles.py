@@ -1,13 +1,19 @@
 #!/usr/bin/env python3
+# ruff: noqa: E402
 """Embed canonical microtopic profile texts for cross-source matching."""
 
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+
+SHARED_DIR = Path(__file__).resolve().parents[1] / "shared"
+if str(SHARED_DIR) not in sys.path:
+    sys.path.insert(0, str(SHARED_DIR))
 
 from cross_source_microtopic_common import OUTPUT_ROOT, configure_logging, write_json
 from workflow_common import detect_embedding_model_name, load_config, load_sentence_transformer
@@ -23,6 +29,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--profiles-csv", type=Path, default=None)
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--model-name", type=str, default=None)
+    parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
     parser.add_argument("--log-level", type=str, default="INFO")
     return parser.parse_args()
 
@@ -36,8 +43,11 @@ def main() -> None:
     if profiles.empty:
         raise SystemExit("No microtopic profiles found to embed.")
 
-    config = load_config(DEFAULT_CONFIG)
-    model_name = args.model_name or detect_embedding_model_name(config)
+    if args.model_name:
+        model_name = args.model_name
+    else:
+        config = load_config(args.config)
+        model_name = detect_embedding_model_name(config)
     model = load_sentence_transformer(model_name)
 
     texts = profiles["profile_text"].fillna("").astype(str).tolist()

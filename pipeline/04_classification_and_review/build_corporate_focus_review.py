@@ -1,13 +1,19 @@
 #!/usr/bin/env python3
+# ruff: noqa: E402
 """Build an auditable corporate-focused review layer from direct cross-source semantic pairs."""
 
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
+
+SHARED_DIR = Path(__file__).resolve().parents[1] / "shared"
+if str(SHARED_DIR) not in sys.path:
+    sys.path.insert(0, str(SHARED_DIR))
 
 from cross_source_microtopic_common import SOURCE_ORDER, build_pair_id, configure_logging, write_json
 from microtopic_posthoc_merge_common import (
@@ -16,7 +22,6 @@ from microtopic_posthoc_merge_common import (
     MERGED_MICRO_ROOT_MULTIASPECT_REVIEWED,
     ensure_directory,
     json_dumps,
-    normalize_text,
     sanitize_frame_for_excel,
     workbook_autofit,
 )
@@ -30,7 +35,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--merged-micro-root", type=Path, default=MERGED_MICRO_ROOT_MULTIASPECT_REVIEWED)
     parser.add_argument("--pair-root", type=Path, default=CORPORATE_FOCUS_PAIR_OUTPUT_ROOT)
     parser.add_argument("--output-root", type=Path, default=CORPORATE_FOCUS_REVIEW_OUTPUT_ROOT)
-    parser.add_argument("--similarity-threshold", type=float, default=0.60)
+    parser.add_argument("--similarity-threshold", type=float, default=0.65)
     parser.add_argument("--log-level", type=str, default="INFO")
     return parser.parse_args()
 

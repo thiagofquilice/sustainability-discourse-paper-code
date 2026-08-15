@@ -1,12 +1,18 @@
 #!/usr/bin/env python3
+# ruff: noqa: E402
 """Prepare a Colab upload package for corporate-focused Stage 1/2 runs."""
 
 from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
+
+SHARED_DIR = Path(__file__).resolve().parents[1] / "shared"
+if str(SHARED_DIR) not in sys.path:
+    sys.path.insert(0, str(SHARED_DIR))
 
 from microtopic_posthoc_merge_common import CORPORATE_FOCUS_STAGE12_INPUT_ROOT, ensure_directory
 

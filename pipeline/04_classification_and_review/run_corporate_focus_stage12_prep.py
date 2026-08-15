@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ruff: noqa: E402
 """Prepare the corporate-focused subset and Colab package for Stage 1/2."""
 
 from __future__ import annotations
@@ -7,6 +8,10 @@ import argparse
 import subprocess
 import sys
 from pathlib import Path
+
+SHARED_DIR = Path(__file__).resolve().parents[1] / "shared"
+if str(SHARED_DIR) not in sys.path:
+    sys.path.insert(0, str(SHARED_DIR))
 
 from cross_source_microtopic_common import configure_logging
 from microtopic_posthoc_merge_common import (
@@ -19,7 +24,11 @@ from microtopic_posthoc_merge_common import (
 )
 
 
-SCRIPT_DIR = Path(__file__).resolve().parent
+PIPELINE_ROOT = Path(__file__).resolve().parents[1]
+TOPIC_MODELING_DIR = PIPELINE_ROOT / "02_topic_modeling"
+DESCRIPTION_DIR = PIPELINE_ROOT / "03_topic_description_and_interpretation"
+REVIEW_DIR = PIPELINE_ROOT / "04_classification_and_review"
+CROSS_SOURCE_DIR = PIPELINE_ROOT / "05_cross_source_comparison"
 
 
 def parse_args() -> argparse.Namespace:
@@ -34,16 +43,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--pair-root", type=Path, default=CORPORATE_FOCUS_PAIR_OUTPUT_ROOT)
     parser.add_argument("--review-root", type=Path, default=CORPORATE_FOCUS_REVIEW_OUTPUT_ROOT)
     parser.add_argument("--stage12-output-root", type=Path, default=CORPORATE_FOCUS_STAGE12_INPUT_ROOT)
-    parser.add_argument("--similarity-threshold", type=float, default=0.60)
-    parser.add_argument("--main-threshold", type=float, default=0.65)
+    parser.add_argument("--similarity-threshold", type=float, default=0.65)
+    parser.add_argument("--embedding-model-name", type=str, default=None)
     parser.add_argument("--max-chunks-per-year", type=int, default=5)
     parser.add_argument("--skip-colab-package", action="store_true")
     parser.add_argument("--log-level", type=str, default="INFO")
     return parser.parse_args()
 
 
-def run_script(script_name: str, args: list[str]) -> None:
-    cmd = [sys.executable, str(SCRIPT_DIR / script_name), *args]
+def run_script(script_path: Path, args: list[str]) -> None:
+    cmd = [sys.executable, str(script_path), *args]
     print(f"[corporate-focus] running: {' '.join(cmd)}")
     subprocess.run(cmd, check=True)
 
@@ -67,7 +76,7 @@ def main() -> None:
     reviewed_workbook = workbook_path(args.group_review_root)
 
     run_script(
-        "materialize_microtopic_group_review_mapping.py",
+        TOPIC_MODELING_DIR / "materialize_microtopic_group_review_mapping.py",
         [
             "--output-root",
             str(args.group_review_root),
@@ -80,7 +89,7 @@ def main() -> None:
 
     mapping_csv = args.group_review_root / "microtopic_to_merged_group.csv"
     run_script(
-        "build_merged_microtopic_root.py",
+        TOPIC_MODELING_DIR / "build_merged_microtopic_root.py",
         [
             "--micro-root",
             str(args.raw_micro_root),
@@ -94,21 +103,42 @@ def main() -> None:
     )
 
     run_script(
-        "run_cross_source_microtopic_pipeline.py",
+        CROSS_SOURCE_DIR / "build_cross_source_microtopic_profiles.py",
         [
             "--micro-root",
             str(args.merged_micro_root),
             "--output-root",
             str(args.pair_root),
-            "--main-threshold",
-            str(args.main_threshold),
+            "--log-level",
+            args.log_level,
+        ],
+    )
+
+    embedding_args = [
+        "--output-root",
+        str(args.pair_root),
+        "--log-level",
+        args.log_level,
+    ]
+    if args.embedding_model_name:
+        embedding_args.extend(["--model-name", args.embedding_model_name])
+    run_script(
+        CROSS_SOURCE_DIR / "embed_cross_source_microtopic_profiles.py",
+        embedding_args,
+    )
+
+    run_script(
+        CROSS_SOURCE_DIR / "match_cross_source_microtopics.py",
+        [
+            "--output-root",
+            str(args.pair_root),
             "--log-level",
             args.log_level,
         ],
     )
 
     run_script(
-        "build_corporate_focus_review.py",
+        REVIEW_DIR / "build_corporate_focus_review.py",
         [
             "--merged-micro-root",
             str(args.merged_micro_root),
@@ -124,7 +154,7 @@ def main() -> None:
     )
 
     run_script(
-        "build_corporate_focus_stage12_inputs.py",
+        DESCRIPTION_DIR / "build_corporate_focus_stage12_inputs.py",
         [
             "--micro-root",
             str(args.merged_micro_root),
@@ -141,7 +171,7 @@ def main() -> None:
 
     if not args.skip_colab_package:
         run_script(
-            "build_corporate_focus_colab_package.py",
+            DESCRIPTION_DIR / "build_corporate_focus_colab_package.py",
             [
                 "--input-root",
                 str(args.stage12_output_root),

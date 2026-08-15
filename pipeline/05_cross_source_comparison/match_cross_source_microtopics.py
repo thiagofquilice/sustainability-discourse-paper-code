@@ -1,13 +1,19 @@
 #!/usr/bin/env python3
+# ruff: noqa: E402
 """Match semantically similar microtopics across sources within macro-topic."""
 
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+
+SHARED_DIR = Path(__file__).resolve().parents[1] / "shared"
+if str(SHARED_DIR) not in sys.path:
+    sys.path.insert(0, str(SHARED_DIR))
 
 from cross_source_microtopic_common import (
     DYAD_LABELS,
