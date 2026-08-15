@@ -13,7 +13,6 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
-from tqdm.auto import tqdm
 
 
 PROMPT_TEMPLATE = """You are a binary classifier.
@@ -214,10 +213,10 @@ def generate_batch(model, tokenizer, rows: list[pd.Series], args: argparse.Names
             pad_token_id=tokenizer.pad_token_id,
             eos_token_id=tokenizer.eos_token_id,
         )
-    input_lengths = attention_mask.sum(dim=1).tolist()
+    prompt_length = input_ids.shape[1]
     decisions: list[str] = []
-    for idx, length in enumerate(input_lengths):
-        new_tokens = generated[idx, int(length):]
+    for idx in range(len(rows)):
+        new_tokens = generated[idx, prompt_length:]
         decoded = tokenizer.decode(new_tokens, skip_special_tokens=True)
         decisions.append(normalize_decision(decoded))
     return decisions
@@ -282,6 +281,8 @@ def persist_outputs(*, output_df: pd.DataFrame, error_df: pd.DataFrame, manifest
 
 def main() -> None:
     args = parse_args()
+    from tqdm.auto import tqdm
+
     args.output_path.parent.mkdir(parents=True, exist_ok=True)
     local_error_path = args.output_path.parent / "error_log.csv"
     local_manifest_path = args.output_path.parent / "run_manifest.json"

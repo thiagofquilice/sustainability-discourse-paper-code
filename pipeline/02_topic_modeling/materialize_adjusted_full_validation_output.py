@@ -46,18 +46,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--best-only-positive", type=Path, default=DEFAULT_BEST_ONLY_POSITIVE)
     parser.add_argument(
         "--adjustment-mode",
-        choices=["historical_t2_secondary_recovery", "generic_no_t2_recovery"],
-        default="historical_t2_secondary_recovery",
+        choices=["study_t2_secondary_recovery", "generic_no_t2_recovery"],
+        default="study_t2_secondary_recovery",
         help=(
-            "Historical reproduction applies the study-specific T2 secondary recovery. "
-            "Use generic_no_t2_recovery only for new data without that reviewed adjustment."
+            "The Chapter 4 route applies the study-specific T2 secondary recovery. "
+            "Use generic_no_t2_recovery for new data without that reviewed adjustment."
         ),
     )
     parser.add_argument(
         "--remap-file",
         type=Path,
         default=DEFAULT_T2_REMAP_FILE,
-        help="Study-specific T2 remapping table used by the historical reproduction route.",
+        help="Study-specific T2 remapping table used by the Chapter 4 route.",
     )
     parser.add_argument(
         "--changed-gemma",
@@ -187,13 +187,13 @@ def main() -> None:
     args = parse_args()
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
-    if args.adjustment_mode == "historical_t2_secondary_recovery":
+    if args.adjustment_mode == "study_t2_secondary_recovery":
         if args.remap_file is None or args.changed_gemma is None:
-            raise SystemExit("Historical T2 recovery requires --remap-file and --changed-gemma.")
+            raise SystemExit("Study-specific T2 recovery requires --remap-file and --changed-gemma.")
         missing = [str(path) for path in [args.remap_file, args.changed_gemma] if not path.exists()]
         if missing:
             raise SystemExit(
-                "Historical T2 recovery inputs are missing: "
+                "Study-specific T2 recovery inputs are missing: "
                 + ", ".join(missing)
                 + ". Use --adjustment-mode generic_no_t2_recovery only for new data."
             )
@@ -203,7 +203,7 @@ def main() -> None:
     catalog = load_catalog(args.catalog)
 
     full_enriched = enrich_from_best_only(full, best_only_positive)
-    if args.adjustment_mode == "historical_t2_secondary_recovery":
+    if args.adjustment_mode == "study_t2_secondary_recovery":
         remap = read_table(args.remap_file)
         changed_gemma = read_table(args.changed_gemma)
         changed_gemma_enriched = enrich_from_best_only(changed_gemma, best_only_positive)
@@ -212,8 +212,8 @@ def main() -> None:
         relevant_chunk_ids = changed_chunk_ids | full_chunk_ids
         remap = remap.loc[remap["chunk_id"].astype(str).isin(relevant_chunk_ids)].copy()
         adjusted, manifest = materialize_adjusted(full_enriched, remap, changed_gemma_enriched)
-        manifest["adjustment_mode"] = "historical_t2_secondary_recovery"
-        manifest["historical_t2_secondary_recovery_preserved"] = True
+        manifest["adjustment_mode"] = "study_t2_secondary_recovery"
+        manifest["study_t2_secondary_recovery_applied"] = True
         manifest["changed_gemma_rows_matching_full_input"] = int(
             changed_gemma_enriched["chunk_id"].astype(str).isin(full_chunk_ids).sum()
         )
@@ -226,7 +226,7 @@ def main() -> None:
             "full_rows_original": int(len(full_enriched)),
             "adjusted_rows": int(len(adjusted)),
             "adjustment_mode": "generic_no_t2_recovery",
-            "historical_t2_secondary_recovery_preserved": False,
+            "study_t2_secondary_recovery_applied": False,
         }
     adjusted = refresh_topic_columns(adjusted, catalog)
 

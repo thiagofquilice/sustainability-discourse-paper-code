@@ -552,7 +552,7 @@ def build_readme_sheet() -> pd.DataFrame:
             },
             {
                 "section": "all_groups_optional",
-                "detail": "Visão enciclopédica dos 241 grupos selecionados com narrativas Stage 2 completas.",
+                "detail": "Visão completa dos grupos selecionados com narrativas Stage 2 disponíveis.",
             },
             {
                 "section": "Manual columns",

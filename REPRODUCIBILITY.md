@@ -17,7 +17,7 @@ Edit the copied configuration so the corpus and embedding paths refer to local f
 
 ## Stage 1 corpus embeddings
 
-The corpus needs the seven columns documented in the README. Row order is the link between the corpus and the float32 embedding memmap. The script below is a compatible utility for readers; the exact historical embedding-creation command was not preserved in a full run manifest, although the audited embedding metadata and assignment script confirm the model and normalization used downstream.
+The corpus needs the seven columns documented in the README. Row order is the link between the corpus and the float32 embedding memmap. The script below creates normalized embeddings with the model and dimensions required by the assignment stage.
 
 ```bash
 python pipeline/01_data_preparation/embed_corpus.py \
@@ -35,7 +35,7 @@ python pipeline/02_topic_modeling/run_6topic_discourse_cosine.py \
   --output-root outputs/cosine
 ```
 
-The historical `best_only_positive.parquet` contains assignments whose best domain score is at least `0.65`. The `score_gap`/`score_margin=0.02` field is retained as a diagnostic. Setting `assignment.apply_score_margin_to_positive_mask=true` creates a non-historical sensitivity run.
+`best_only_positive.parquet` contains assignments whose best domain score is at least `0.65`. The `score_gap`/`score_margin=0.02` field is retained as a diagnostic. Setting `assignment.apply_score_margin_to_positive_mask=true` additionally requires that margin and can be used as a sensitivity analysis.
 
 ## Stage 3 Gemma relevance validation
 
@@ -51,7 +51,7 @@ python pipeline/02_topic_modeling/run_hf_gemma_domain_validation_colab.py \
   --max-new-tokens 1
 ```
 
-The copied historical script uses `AutoModelForCausalLM`, 4-bit quantization, deterministic decoding, and the audited binary prompt. It records `v_gemma` and an error log; malformed responses are written to the error log rather than silently converted.
+The script uses `AutoModelForCausalLM`, 4-bit quantization, deterministic decoding, and a binary prompt. It records `v_gemma` and an error log. Malformed responses are written to the error log rather than silently converted.
 
 ## Stage 4 validated modeling corpus
 
@@ -64,7 +64,7 @@ python pipeline/02_topic_modeling/materialize_adjusted_full_validation_output.py
   --output-dir outputs/validation/adjusted
 ```
 
-The historical route applies T2 secondary recovery by default. The audited server showed `5333` changed-to-other T2 recovery rows, `5324` of them matching the full Gemma input, and nine pilot rows outside that input; the materialization manifest records this split. For new data that never used the study-specific T2 review, run the same command with `--adjustment-mode generic_no_t2_recovery`.
+The Chapter 4 route applies the study-specific T2 secondary recovery by default and records its reconciliation in the materialization manifest. For a new corpus that has not passed through that review, run the same command with `--adjustment-mode generic_no_t2_recovery`. In that mode the remap and secondary validation files are not required.
 
 ## Stage 5 source specific BERTopic models
 
@@ -131,7 +131,7 @@ python pipeline/04_classification_and_review/build_corporate_focus_review.py \
   --primary-threshold 0.65
 ```
 
-This command creates the threshold-based candidate layer for the first human review. Use `--primary-threshold 0.65` to keep the audited main reference threshold explicit; it is the default. Selection is not presented as a fully automatic 0.65-only rule because below-threshold review-band candidates and manual overrides affected the final repertoire. The hybrid workbook is created only after temporal synthesis because it requires the completed Stage 2 narratives.
+This command creates the threshold-based candidate layer for the first human review. The `--primary-threshold 0.65` default keeps the main reference threshold explicit. Selection is not a fully automatic 0.65-only rule because the review band and manual decisions are part of the method. The hybrid workbook is created only after temporal synthesis because it requires the completed Stage 2 narratives.
 
 After the reviewed merge workbook exists, the convenience wrapper can repeat merge materialization, cross source comparison, corporate candidate construction, and Stage 1 and 2 input preparation.
 
@@ -160,7 +160,7 @@ python pipeline/03_topic_description_and_interpretation/build_corporate_focus_dr
   --zip-path outputs/corporate_focus_stage12_colab_drive.zip
 ```
 
-The two Gemma runners inside `pipeline/03_topic_description_and_interpretation` execute annual summaries and temporal evolution synthesis with `AutoModelForCausalLM`. The audited effective parameters were Stage 1 `batch_size=6`, `save_every=20`, `max_new_tokens=320`, and Stage 2 `max_new_tokens=650`, `max_attempts=4`. The audited intermediate synthesis input contained `241` selected microtopics and `4344` topic-year evidence rows. They require model access and a GPU. The Drive bundle builder packages those runners and their inputs for Colab.
+The two Gemma runners inside `pipeline/03_topic_description_and_interpretation` execute annual summaries and temporal evolution synthesis with `AutoModelForCausalLM`. Their defaults are Stage 1 `batch_size=6`, `save_every=20`, `max_new_tokens=320`, and Stage 2 `max_new_tokens=650`, `max_attempts=4`. They require model access and a GPU. The Drive bundle builder packages those runners and their inputs for Colab.
 
 ## Stage 10 post synthesis hybrid review
 
@@ -175,27 +175,16 @@ python pipeline/04_classification_and_review/build_corporate_focus_hybrid_review
   --merged-micro-root outputs/bertopic_micro_merged_multiaspect_reviewed
 ```
 
-This workbook supports the final human audit of corporate relevance, paired external issues, relevant unpaired issues, and exclusions while displaying the temporal narratives on both sides of each comparison.
-
-
-## Audited count checkpoints
-
-- Domain assignment diagnostics: `411658` positive assignments at `threshold=0.65`, variant `six_topic_elements_max_without_margin`.
-- Gemma full validation input: `410658` rows after removal of the `1000` pilot rows from the full package.
-- T2 secondary recovery: `5333` old-T2-to-other rows validated, `5324` matched to the full-run T2 adjustment, and nine pilot rows outside the full Gemma input.
-- Temporal synthesis input: `241` selected microtopics and `4344` topic-year evidence rows.
-- Post-comment review layer: `214` noncorporate topics reviewed, `170` retained before the final group-exclusion filter.
-- Final group-exclusion manifests: `182` retained groups, split as `18` corporate, `12` media, and `152` academic, with `114047` unique documents. The audited files did not confirm a final `153` academic / `165` noncorporate count.
-- A claim of `232` retained noncorporate microtopics was not found as a manifest-backed final count. The exact value `232` appears only as an unrelated row count in one hierarchical-topics file; it can also be derived as `241` synthesis topics minus nine excluded corporate anchors, which is not a noncorporate final repertoire count.
+This workbook supports the final human review of corporate relevance, paired external issues, relevant unpaired issues, and exclusions while displaying the temporal narratives on both sides of each comparison.
 
 ## ODS/SDG metadata
 
-The SDG crosswalks are defined in the six-topic catalog and reproduced in Appendix I. They are copied to assignment outputs and appendix tables as metadata. Six-domain embeddings are computed from descriptor expressions/subanchors, and corpus embeddings are computed from the corpus text; the SDG crosswalk strings are not embedded for assignment.
+The SDG crosswalks are defined in the six-topic catalog and copied to assignment outputs as metadata. Six-domain embeddings are computed from descriptor expressions and subanchors, and corpus embeddings are computed from the corpus text. The SDG crosswalk strings are not embedded for assignment.
 
 
-## Version Evidence
+## Dependency compatibility
 
-The six-domain Gemma validation manifest records `transformers_version=5.5.3`. The temporal synthesis output manifests record `transformers_version=5.5.4`. The audited BERTopic manifests do not record exact historical versions for BERTopic, sentence-transformers, torch, spaCy, UMAP, or HDBSCAN; `requirements-full.txt` therefore documents compatible reproduction dependencies rather than a manifest-proven historical lockfile for those packages.
+`requirements-full.txt` specifies a compatible execution environment. Generated manifests record relevant runtime and model information so readers can document the environment used for their own run.
 
 ## Verification without research models
 

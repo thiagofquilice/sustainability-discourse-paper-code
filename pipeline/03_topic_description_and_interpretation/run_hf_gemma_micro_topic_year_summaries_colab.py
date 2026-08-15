@@ -158,7 +158,7 @@ def build_prompt(row: pd.Series) -> str:
     )
 
 
-def load_model_and_processor(args: argparse.Namespace):
+def load_model_and_tokenizer(args: argparse.Namespace):
     import torch
     import transformers
     from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
@@ -194,16 +194,16 @@ def load_model_and_processor(args: argparse.Namespace):
     return model, tokenizer, hardware
 
 
-def generate_batch(model, processor, rows: list[pd.Series], args: argparse.Namespace) -> list[str]:
+def generate_batch(model, tokenizer, rows: list[pd.Series], args: argparse.Namespace) -> list[str]:
     prompts = [
-        processor.apply_chat_template(
+        tokenizer.apply_chat_template(
             [{"role": "user", "content": build_prompt(row)}],
             tokenize=False,
             add_generation_prompt=True,
         )
         for row in rows
     ]
-    inputs = processor(text=prompts, return_tensors="pt", padding=True, truncation=True)
+    inputs = tokenizer(prompts, return_tensors="pt", padding=True, truncation=True)
     inputs = {key: value.to(model.device) for key, value in inputs.items()}
     input_ids = inputs["input_ids"]
     generated = model.generate(
@@ -211,12 +211,12 @@ def generate_batch(model, processor, rows: list[pd.Series], args: argparse.Names
         max_new_tokens=args.max_new_tokens,
         do_sample=False,
         use_cache=True,
-        pad_token_id=processor.pad_token_id,
+        pad_token_id=tokenizer.pad_token_id,
     )
     prompt_length = input_ids.shape[1]
     return [
         text.strip()
-        for text in processor.batch_decode(
+        for text in tokenizer.batch_decode(
             generated[:, prompt_length:],
             skip_special_tokens=True,
         )
@@ -273,7 +273,7 @@ def main() -> None:
     pending = pending.reset_index(drop=True)
 
     print_log(f"Input rows={len(frame)} pending_rows={len(pending)} completed_rows={len(completed)}")
-    model, processor, hardware = load_model_and_processor(args)
+    model, tokenizer, hardware = load_model_and_tokenizer(args)
     print_log(f"Loaded model={args.model_name} gpu={hardware['gpu_name']}")
 
     saved_rows: list[dict[str, Any]] = []
@@ -283,7 +283,7 @@ def main() -> None:
 
     for start in tqdm(range(0, len(pending), args.batch_size), desc="Gemma annual summaries"):
         batch = pending.iloc[start : start + args.batch_size]
-        raw_outputs = generate_batch(model, processor, [row for _, row in batch.iterrows()], args)
+        raw_outputs = generate_batch(model, tokenizer, [row for _, row in batch.iterrows()], args)
         for (_, row), raw_response in zip(batch.iterrows(), raw_outputs):
             raw_response = sanitize_model_output(raw_response)
             key = (str(row["subgroup"]), int(row["micro_topic_id"]), int(row["year"]))

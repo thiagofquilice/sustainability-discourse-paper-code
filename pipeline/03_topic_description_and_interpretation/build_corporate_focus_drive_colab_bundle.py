@@ -671,8 +671,7 @@ def build_bundle_manifest(selection_manifest: dict, source_input_root: Path) -> 
             },
         },
         "recommended_runtime": {
-            "gpu": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
-            "vram_gb": 96,
+            "gpu": "CUDA-compatible GPU with sufficient memory for 4-bit model loading",
         },
     }
 

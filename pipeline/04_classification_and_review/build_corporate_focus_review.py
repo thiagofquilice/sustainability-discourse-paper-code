@@ -341,7 +341,7 @@ def write_workbook(
             {
                 "rule": "academic/media groups",
                 "detail": (
-                    "The historical first-pass review included a non-corporate group when it had at least "
+                    "The first review pass includes a non-corporate group when it has at least "
                     f"one direct pair with corporate and cosine_similarity >= {threshold:.2f}. The {primary_threshold:.2f} "
                     "threshold was retained as the main reporting/reference threshold; groups below it form a review band."
                 ),
