@@ -43,7 +43,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--pair-root", type=Path, default=CORPORATE_FOCUS_PAIR_OUTPUT_ROOT)
     parser.add_argument("--review-root", type=Path, default=CORPORATE_FOCUS_REVIEW_OUTPUT_ROOT)
     parser.add_argument("--stage12-output-root", type=Path, default=CORPORATE_FOCUS_STAGE12_INPUT_ROOT)
-    parser.add_argument("--similarity-threshold", type=float, default=0.65)
+    parser.add_argument("--similarity-threshold", type=float, default=0.60)
+    parser.add_argument("--primary-threshold", type=float, default=0.65)
     parser.add_argument("--embedding-model-name", type=str, default=None)
     parser.add_argument("--max-chunks-per-year", type=int, default=5)
     parser.add_argument("--skip-colab-package", action="store_true")
@@ -148,6 +149,8 @@ def main() -> None:
             str(args.review_root),
             "--similarity-threshold",
             str(args.similarity_threshold),
+            "--primary-threshold",
+            str(args.primary_threshold),
             "--log-level",
             args.log_level,
         ],

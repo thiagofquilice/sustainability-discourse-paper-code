@@ -15,6 +15,19 @@ DEFAULT_FULL_OUTPUT = WORKFLOW_ROOT / "outputs" / "validation" / "validation_out
 DEFAULT_BEST_ONLY_POSITIVE = WORKFLOW_ROOT / "outputs" / "cosine" / "best_only_positive.parquet"
 DEFAULT_CATALOG = WORKFLOW_ROOT / "catalog" / "six_topic_discourse_catalog.csv"
 DEFAULT_OUTPUT_DIR = WORKFLOW_ROOT / "outputs" / "validation" / "adjusted"
+DEFAULT_T2_REMAP_FILE = (
+    WORKFLOW_ROOT
+    / "outputs"
+    / "t2_secondary_recovery_cosine_round"
+    / "old_t2_under_secondary_recovery_variant.parquet"
+)
+DEFAULT_T2_CHANGED_GEMMA = (
+    WORKFLOW_ROOT
+    / "outputs"
+    / "t2_secondary_recovery_cosine_round"
+    / "gemma_local_full"
+    / "validation_output.csv"
+)
 
 
 REFRESH_FROM_CATALOG_COLUMNS = [
@@ -32,16 +45,25 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--full-output", type=Path, default=DEFAULT_FULL_OUTPUT)
     parser.add_argument("--best-only-positive", type=Path, default=DEFAULT_BEST_ONLY_POSITIVE)
     parser.add_argument(
+        "--adjustment-mode",
+        choices=["historical_t2_secondary_recovery", "generic_no_t2_recovery"],
+        default="historical_t2_secondary_recovery",
+        help=(
+            "Historical reproduction applies the study-specific T2 secondary recovery. "
+            "Use generic_no_t2_recovery only for new data without that reviewed adjustment."
+        ),
+    )
+    parser.add_argument(
         "--remap-file",
         type=Path,
-        default=None,
-        help="Optional study-specific T2 remapping table. Requires --changed-gemma.",
+        default=DEFAULT_T2_REMAP_FILE,
+        help="Study-specific T2 remapping table used by the historical reproduction route.",
     )
     parser.add_argument(
         "--changed-gemma",
         type=Path,
-        default=None,
-        help="Optional validation output for remapped T2 rows. Requires --remap-file.",
+        default=DEFAULT_T2_CHANGED_GEMMA,
+        help="Gemma validation output for old-T2 rows remapped to another domain.",
     )
     parser.add_argument("--catalog", type=Path, default=DEFAULT_CATALOG)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
@@ -165,29 +187,46 @@ def main() -> None:
     args = parse_args()
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
-    if (args.remap_file is None) != (args.changed_gemma is None):
-        raise SystemExit("--remap-file and --changed-gemma must be supplied together.")
+    if args.adjustment_mode == "historical_t2_secondary_recovery":
+        if args.remap_file is None or args.changed_gemma is None:
+            raise SystemExit("Historical T2 recovery requires --remap-file and --changed-gemma.")
+        missing = [str(path) for path in [args.remap_file, args.changed_gemma] if not path.exists()]
+        if missing:
+            raise SystemExit(
+                "Historical T2 recovery inputs are missing: "
+                + ", ".join(missing)
+                + ". Use --adjustment-mode generic_no_t2_recovery only for new data."
+            )
 
     full = read_table(args.full_output)
     best_only_positive = pd.read_parquet(args.best_only_positive)
     catalog = load_catalog(args.catalog)
 
     full_enriched = enrich_from_best_only(full, best_only_positive)
-    if args.remap_file is not None and args.changed_gemma is not None:
+    if args.adjustment_mode == "historical_t2_secondary_recovery":
         remap = read_table(args.remap_file)
         changed_gemma = read_table(args.changed_gemma)
         changed_gemma_enriched = enrich_from_best_only(changed_gemma, best_only_positive)
         changed_chunk_ids = set(changed_gemma_enriched["chunk_id"].astype(str))
-        relevant_chunk_ids = changed_chunk_ids | set(full_enriched["chunk_id"].astype(str))
+        full_chunk_ids = set(full_enriched["chunk_id"].astype(str))
+        relevant_chunk_ids = changed_chunk_ids | full_chunk_ids
         remap = remap.loc[remap["chunk_id"].astype(str).isin(relevant_chunk_ids)].copy()
         adjusted, manifest = materialize_adjusted(full_enriched, remap, changed_gemma_enriched)
-        manifest["adjustment_mode"] = "t2_secondary_recovery"
+        manifest["adjustment_mode"] = "historical_t2_secondary_recovery"
+        manifest["historical_t2_secondary_recovery_preserved"] = True
+        manifest["changed_gemma_rows_matching_full_input"] = int(
+            changed_gemma_enriched["chunk_id"].astype(str).isin(full_chunk_ids).sum()
+        )
+        manifest["changed_gemma_rows_outside_full_input"] = int(
+            (~changed_gemma_enriched["chunk_id"].astype(str).isin(full_chunk_ids)).sum()
+        )
     else:
         adjusted = full_enriched.copy()
         manifest = {
             "full_rows_original": int(len(full_enriched)),
             "adjusted_rows": int(len(adjusted)),
-            "adjustment_mode": "validated_assignments_without_study_specific_remap",
+            "adjustment_mode": "generic_no_t2_recovery",
+            "historical_t2_secondary_recovery_preserved": False,
         }
     adjusted = refresh_topic_columns(adjusted, catalog)
 

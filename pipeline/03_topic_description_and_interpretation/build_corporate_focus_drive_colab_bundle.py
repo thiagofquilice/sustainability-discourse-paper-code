@@ -21,7 +21,7 @@ BUNDLE_VERSION = "1.1.0"
 DEFAULT_STAGE1_BATCH_SIZE = 6
 DEFAULT_STAGE1_MAX_NEW_TOKENS = 320
 DEFAULT_STAGE1_SAVE_EVERY = 20
-DEFAULT_STAGE2_MAX_NEW_TOKENS = 400
+DEFAULT_STAGE2_MAX_NEW_TOKENS = 650
 DEFAULT_STAGE2_MAX_ATTEMPTS = 4
 
 DEFAULT_SOURCE_INPUT_ROOT = REPO_ROOT / "outputs" / "corporate_focus_stage12_input"
@@ -628,10 +628,10 @@ def build_troubleshooting_doc() -> str:
         - Stage 2 uses the robust runner with retries and `--max-attempts`
         - the notebook does not use heredocs in inspection cells
 
-        ## Why Stage 2 uses 400 / 4
+        ## Why Stage 2 uses 650 / 4
 
         Stage 2 was more robust with:
-        - `max_new_tokens = 400`
+        - `max_new_tokens = 650`
         - `max_attempts = 4`
 
         Isso deixa a execução mais lenta, mas reduz bastante o risco de:

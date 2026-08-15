@@ -161,7 +161,7 @@ def build_prompt(row: pd.Series) -> str:
 def load_model_and_processor(args: argparse.Namespace):
     import torch
     import transformers
-    from transformers import AutoModelForMultimodalLM, AutoProcessor, BitsAndBytesConfig
+    from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
     if not torch.cuda.is_available():
         raise RuntimeError("No CUDA GPU detected. Use a Colab GPU runtime.")
@@ -172,12 +172,13 @@ def load_model_and_processor(args: argparse.Namespace):
         bnb_4bit_use_double_quant=True,
         bnb_4bit_compute_dtype=torch.float16,
     )
-    processor = AutoProcessor.from_pretrained(args.model_name)
-    processor.tokenizer.padding_side = "left"
-    model = AutoModelForMultimodalLM.from_pretrained(
+    tokenizer = AutoTokenizer.from_pretrained(args.model_name)
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+    tokenizer.padding_side = "left"
+    model = AutoModelForCausalLM.from_pretrained(
         args.model_name,
         device_map="auto",
-        dtype="auto",
         quantization_config=quantization_config,
     )
     model.eval()
@@ -189,7 +190,8 @@ def load_model_and_processor(args: argparse.Namespace):
         "gpu_name": torch.cuda.get_device_name(0),
         "gpu_count": int(torch.cuda.device_count()),
     }
-    return model, processor, hardware
+    hardware["model_loader"] = "AutoModelForCausalLM"
+    return model, tokenizer, hardware
 
 
 def generate_batch(model, processor, rows: list[pd.Series], args: argparse.Namespace) -> list[str]:
@@ -198,7 +200,6 @@ def generate_batch(model, processor, rows: list[pd.Series], args: argparse.Names
             [{"role": "user", "content": build_prompt(row)}],
             tokenize=False,
             add_generation_prompt=True,
-            enable_thinking=False,
         )
         for row in rows
     ]
@@ -210,7 +211,7 @@ def generate_batch(model, processor, rows: list[pd.Series], args: argparse.Names
         max_new_tokens=args.max_new_tokens,
         do_sample=False,
         use_cache=True,
-        pad_token_id=processor.tokenizer.pad_token_id,
+        pad_token_id=processor.pad_token_id,
     )
     prompt_length = input_ids.shape[1]
     return [

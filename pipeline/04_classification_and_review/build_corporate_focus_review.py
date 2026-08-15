@@ -35,7 +35,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--merged-micro-root", type=Path, default=MERGED_MICRO_ROOT_MULTIASPECT_REVIEWED)
     parser.add_argument("--pair-root", type=Path, default=CORPORATE_FOCUS_PAIR_OUTPUT_ROOT)
     parser.add_argument("--output-root", type=Path, default=CORPORATE_FOCUS_REVIEW_OUTPUT_ROOT)
-    parser.add_argument("--similarity-threshold", type=float, default=0.65)
+    parser.add_argument("--similarity-threshold", type=float, default=0.60)
+    parser.add_argument("--primary-threshold", type=float, default=0.65)
     parser.add_argument("--log-level", type=str, default="INFO")
     return parser.parse_args()
 
@@ -328,6 +329,7 @@ def write_workbook(
     pair_evidence: pd.DataFrame,
     excluded_noncorporate: pd.DataFrame,
     threshold: float,
+    primary_threshold: float,
 ) -> Path:
     workbook_path = output_root / "corporate_focus_review.xlsx"
     instructions = pd.DataFrame(
@@ -339,8 +341,9 @@ def write_workbook(
             {
                 "rule": "academic/media groups",
                 "detail": (
-                    "A non-corporate group is included when it has at least one direct pair with corporate "
-                    f"and cosine_similarity >= {threshold:.2f}."
+                    "The historical first-pass review included a non-corporate group when it had at least "
+                    f"one direct pair with corporate and cosine_similarity >= {threshold:.2f}. The {primary_threshold:.2f} "
+                    "threshold was retained as the main reporting/reference threshold; groups below it form a review band."
                 ),
             },
             {
@@ -454,6 +457,7 @@ def main() -> None:
         pair_evidence=pair_evidence,
         excluded_noncorporate=excluded_noncorporate,
         threshold=args.similarity_threshold,
+        primary_threshold=args.primary_threshold,
     )
 
     write_json(
@@ -462,9 +466,13 @@ def main() -> None:
             "merged_micro_root": str(args.merged_micro_root),
             "pair_root": str(args.pair_root),
             "similarity_threshold": args.similarity_threshold,
+            "initial_review_threshold": args.similarity_threshold,
+            "primary_reporting_threshold": args.primary_threshold,
+            "below_primary_review_band": [args.similarity_threshold, args.primary_threshold],
             "review_rule": {
                 "include_all_corporate": True,
-                "include_noncorporate_if_any_direct_pair_to_corporate_at_or_above_threshold": True,
+                "include_noncorporate_if_any_direct_pair_to_corporate_at_or_above_initial_threshold": True,
+                "primary_threshold_is_not_an_automatic_exclusion_rule": True,
                 "use_mutual_nearest_neighbor": False,
                 "allow_indirect_academic_media_inclusion": False,
             },
