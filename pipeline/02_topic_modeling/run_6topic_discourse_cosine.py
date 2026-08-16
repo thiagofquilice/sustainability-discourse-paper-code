@@ -1,13 +1,19 @@
 #!/usr/bin/env python3
+# ruff: noqa: E402
 """Run top-1 cosine assignment for the unified 6-topic discourse pipeline."""
 
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+
+SHARED_DIR = Path(__file__).resolve().parents[1] / "shared"
+if str(SHARED_DIR) not in sys.path:
+    sys.path.insert(0, str(SHARED_DIR))
 
 from six_topic_discourse_catalog import TOPIC_GROUPS, bullet_list_text, catalog_rows
 from workflow_common import (
@@ -94,12 +100,14 @@ def main() -> None:
     catalog = build_catalog()
     subanchors = build_subanchor_frame()
 
-    corpus = add_document_aliases(load_corpus(Path(config["paths"]["dataset_corpus"])))
+    corpus = add_document_aliases(
+        load_corpus(Path(config["paths"]["dataset_corpus"]))
+    ).reset_index(drop=True)
     if args.max_docs is not None:
         corpus = corpus.head(args.max_docs).copy()
 
     full_corpus_rows = len(load_corpus(Path(config["paths"]["dataset_corpus"]), columns=["doc_id"]))
-    document_embeddings, _ = load_embedding_memmap(
+    document_embeddings, embedding_meta = load_embedding_memmap(
         Path(config["paths"]["dataset_embeddings"]),
         Path(config["paths"]["dataset_embedding_meta"]),
         expected_rows=full_corpus_rows,
@@ -107,6 +115,12 @@ def main() -> None:
     doc_matrix = np.asarray(document_embeddings[: len(corpus)], dtype="float32")
 
     model_name = detect_embedding_model_name(config)
+    embedding_model_name = str(embedding_meta.get("model_name", "")).strip()
+    if embedding_model_name and embedding_model_name != model_name:
+        raise ValueError(
+            "Embedding model mismatch. "
+            f"Config requests {model_name!r}, while embedding metadata report {embedding_model_name!r}."
+        )
     model = load_sentence_transformer(model_name)
     subanchor_embeddings = model.encode(
         subanchors["subanchor_text"].tolist(),
@@ -119,6 +133,8 @@ def main() -> None:
 
     batch_size = int(config["assignment"]["batch_size"])
     threshold = float(config["assignment"]["similarity_threshold"])
+    score_margin_threshold = float(config["assignment"]["score_margin"])
+    apply_score_margin = bool(config["assignment"].get("apply_score_margin_to_positive_mask", False))
     outside_scope_value = str(config["assignment"]["output_label_for_no_match"])
 
     topic_codes = catalog["topic_code"].tolist()
@@ -143,7 +159,9 @@ def main() -> None:
     second_scores = score_matrix[np.arange(len(score_matrix)), second_idx]
     score_gap = best_scores - second_scores
     n_candidates_above_threshold = (score_matrix >= threshold).sum(axis=1).astype(int)
-    positive_mask = best_scores >= threshold
+    threshold_mask = best_scores >= threshold
+    margin_mask = score_gap >= score_margin_threshold
+    positive_mask = threshold_mask & margin_mask if apply_score_margin else threshold_mask
 
     result = corpus.copy()
     result["embedding_row_index"] = result.index.astype(int)
@@ -163,7 +181,14 @@ def main() -> None:
     result["score_gap"] = score_gap.astype("float64")
     result["score_margin"] = result["score_gap"]
     result["n_candidates_above_threshold"] = n_candidates_above_threshold
-    result["assignment_status"] = np.where(positive_mask, "assigned_positive", "below_threshold")
+    if apply_score_margin:
+        result["assignment_status"] = np.select(
+            [positive_mask, best_scores < threshold],
+            ["assigned_positive", "below_threshold"],
+            default="below_score_margin",
+        )
+    else:
+        result["assignment_status"] = np.where(positive_mask, "assigned_positive", "below_threshold")
     result["assigned_label"] = np.where(positive_mask, result["best_label_code"], outside_scope_value)
     result["assigned_label_id"] = np.where(positive_mask, result["best_label_id"], -1)
     result["topic_name"] = np.where(positive_mask, result["best_topic_name"], "OUTSIDE_SCOPE")
@@ -253,12 +278,24 @@ def main() -> None:
     )
 
     diagnostics = {
-        "variant": "six_topic_elements_max_without_margin",
+        "variant": (
+            "six_topic_elements_max_with_margin_sensitivity"
+            if apply_score_margin
+            else "six_topic_elements_max_without_margin"
+        ),
         "total_rows": int(len(result)),
         "positive_rows": int(len(positive)),
         "outside_scope_rows": int((result["assigned_label"] == outside_scope_value).sum()),
         "outside_scope_share": float(safe_share((result["assigned_label"] == outside_scope_value).sum(), len(result))),
         "threshold": threshold,
+        "score_margin_threshold": score_margin_threshold,
+        "score_margin_applied_to_positive_mask": bool(apply_score_margin),
+        "positive_assignment_rule": (
+            "best_score >= similarity_threshold AND score_gap >= score_margin"
+            if apply_score_margin
+            else "best_score >= similarity_threshold"
+        ),
+        "rows_at_or_above_threshold_below_margin": int((threshold_mask & ~margin_mask).sum()),
         "candidate_rows": int(len(candidates)),
         "docs_with_multiple_candidates": int((result["n_candidates_above_threshold"] > 1).sum()),
         "docs_with_multiple_candidates_share": float(safe_share((result["n_candidates_above_threshold"] > 1).sum(), len(result))),

@@ -3,7 +3,10 @@
     "batch_size": 4096,
     "output_label_for_no_match": "OUTSIDE_SCOPE",
     "score_margin": 0.02,
-    "similarity_threshold": 0.65
+    "similarity_threshold": 0.65,
+    "apply_score_margin_to_positive_mask": false,
+    "score_margin_role": "diagnostic_by_default",
+    "sensitivity_analysis_note": "Set apply_score_margin_to_positive_mask=true to require the configured margin in an optional sensitivity run."
   },
   "bertopic": {
     "classifier_name": "LogisticRegression",

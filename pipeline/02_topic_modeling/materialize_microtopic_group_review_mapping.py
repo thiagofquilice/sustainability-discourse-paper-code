@@ -1,16 +1,22 @@
 #!/usr/bin/env python3
+# ruff: noqa: E402
 """Materialize the merge mapping from grouped merge-review decisions."""
 
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
 import pandas as pd
 
+SHARED_DIR = Path(__file__).resolve().parents[1] / "shared"
+if str(SHARED_DIR) not in sys.path:
+    sys.path.insert(0, str(SHARED_DIR))
+
 from cross_source_microtopic_common import configure_logging
 from microtopic_posthoc_merge_common import (
-    MERGE_FIRST_GROUP_REVIEW_OUTPUT_ROOT,
+    MERGE_FIRST_GROUP_REVIEW_MULTIASPECT_OUTPUT_ROOT,
     ensure_directory,
     json_dumps,
     normalize_text,
@@ -24,7 +30,11 @@ ALLOWED_DECISIONS = {"accept", "reject", "split"}
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output-root", type=Path, default=MERGE_FIRST_GROUP_REVIEW_OUTPUT_ROOT)
+    parser.add_argument(
+        "--output-root",
+        type=Path,
+        default=MERGE_FIRST_GROUP_REVIEW_MULTIASPECT_OUTPUT_ROOT,
+    )
     parser.add_argument("--workbook", type=Path, default=None)
     parser.add_argument("--blank-group-decision", type=str, default="reject")
     parser.add_argument("--log-level", type=str, default="INFO")

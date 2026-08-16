@@ -14,25 +14,21 @@ from pathlib import Path
 import pandas as pd
 
 
-BUNDLE_NAME = "corporate_focus_stage12_colab_drive_with_overrides"
-BUNDLE_VERSION = "1.0.0"
-EXPECTED_SELECTED_TOPIC_COUNT = 241
-EXPECTED_ANNUAL_EVIDENCE_ROW_COUNT = 4344
+SCRIPT_DIR = Path(__file__).resolve().parent
+REPO_ROOT = SCRIPT_DIR.parents[1]
+BUNDLE_NAME = "corporate_focus_stage12_colab_drive"
+BUNDLE_VERSION = "1.1.0"
 DEFAULT_STAGE1_BATCH_SIZE = 6
 DEFAULT_STAGE1_MAX_NEW_TOKENS = 320
 DEFAULT_STAGE1_SAVE_EVERY = 20
-DEFAULT_STAGE2_MAX_NEW_TOKENS = 400
+DEFAULT_STAGE2_MAX_NEW_TOKENS = 650
 DEFAULT_STAGE2_MAX_ATTEMPTS = 4
 
-SCRIPT_DIR = Path(__file__).resolve().parent
-PIPELINE_ROOT = SCRIPT_DIR.parent
-DEFAULT_SOURCE_INPUT_ROOT = PIPELINE_ROOT / "outputs" / "corporate_focus_stage12_input_with_overrides"
-DEFAULT_BUNDLE_ROOT = PIPELINE_ROOT / "outputs" / BUNDLE_NAME
-DEFAULT_ZIP_PATH = PIPELINE_ROOT / "outputs" / f"{BUNDLE_NAME}.zip"
-STAGE1_RUNNER_SOURCE = PIPELINE_ROOT / "colab" / "run_hf_gemma_micro_topic_year_summaries_colab.py"
-STAGE2_RUNNER_SOURCE = (
-    PIPELINE_ROOT / "colab" / "micro_topic_evolution_full" / "run_hf_gemma_micro_topic_evolution_synthesis_colab.py"
-)
+DEFAULT_SOURCE_INPUT_ROOT = REPO_ROOT / "outputs" / "corporate_focus_stage12_input"
+DEFAULT_BUNDLE_ROOT = REPO_ROOT / "outputs" / BUNDLE_NAME
+DEFAULT_ZIP_PATH = REPO_ROOT / "outputs" / f"{BUNDLE_NAME}.zip"
+STAGE1_RUNNER_SOURCE = SCRIPT_DIR / "run_hf_gemma_micro_topic_year_summaries_colab.py"
+STAGE2_RUNNER_SOURCE = SCRIPT_DIR / "run_hf_gemma_micro_topic_evolution_synthesis_colab.py"
 
 
 def parse_args() -> argparse.Namespace:
@@ -120,7 +116,7 @@ def build_notebook() -> dict:
 
             # Se quiser forçar o caminho exato do bundle no Drive, preencha aqui.
             # Exemplo:
-            # DRIVE_PACKAGE_DIR = "/content/drive/MyDrive/Colab Notebooks/corporate_focus_stage12_colab_drive_with_overrides"
+            # DRIVE_PACKAGE_DIR = "/content/drive/MyDrive/Colab Notebooks/corporate_focus_stage12_colab_drive"
             """
         ),
         code_cell(
@@ -223,8 +219,8 @@ def build_notebook() -> dict:
         code_cell(
             """
             !pip uninstall -y torch torchvision torchaudio bitsandbytes transformers accelerate
-            !pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cu128 torch torchvision torchaudio
-            !pip install --no-cache-dir transformers accelerate bitsandbytes huggingface_hub hf_xet pandas tqdm pyarrow openpyxl requests matplotlib
+            !pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cu128 torch==2.7.1 torchvision==0.22.1 torchaudio==2.7.1
+            !pip install --no-cache-dir "transformers>=5.5,<6" "accelerate<2" "bitsandbytes<0.51" "huggingface_hub<2" hf_xet pandas tqdm pyarrow openpyxl requests matplotlib
             """
         ),
         code_cell(
@@ -583,7 +579,7 @@ def build_root_readme() -> str:
         4. Monte o Drive e rode as células em ordem.
 
         Este pacote já inclui:
-        - o subset com overrides integrados
+        - o subset corporativo selecionado
         - runners `.py` físicos em `runners/`
         - notebook Drive-first
         - documentação do troubleshooting
@@ -632,10 +628,10 @@ def build_troubleshooting_doc() -> str:
         - Stage 2 uses the robust runner with retries and `--max-attempts`
         - the notebook does not use heredocs in inspection cells
 
-        ## Why Stage 2 uses 400 / 4
+        ## Why Stage 2 uses 650 / 4
 
         Stage 2 was more robust with:
-        - `max_new_tokens = 400`
+        - `max_new_tokens = 650`
         - `max_attempts = 4`
 
         Isso deixa a execução mais lenta, mas reduz bastante o risco de:
@@ -652,7 +648,7 @@ def build_bundle_manifest(selection_manifest: dict, source_input_root: Path) -> 
         "bundle_version": BUNDLE_VERSION,
         "built_at_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "source_input_root": str(source_input_root),
-        "has_manual_overrides": True,
+        "has_manual_overrides": bool(selection_manifest.get("manual_override_noncorporate_count", 0)),
         "selected_micro_topic_count": int(selection_manifest["selected_micro_topic_count"]),
         "annual_evidence_row_count": int(selection_manifest["annual_evidence_row_count"]),
         "relative_paths": {
@@ -675,8 +671,7 @@ def build_bundle_manifest(selection_manifest: dict, source_input_root: Path) -> 
             },
         },
         "recommended_runtime": {
-            "gpu": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
-            "vram_gb": 96,
+            "gpu": "CUDA-compatible GPU with sufficient memory for 4-bit model loading",
         },
     }
 
@@ -722,21 +717,16 @@ def validate_source_input_root(source_input_root: Path) -> dict:
     if bad_columns:
         raise SystemExit(f"selected_micro_topics.csv still has merge suffix columns: {bad_columns}")
 
-    selected_count = int(selected_topics.shape[0])
-    annual_count = int(annual_evidence.shape[0])
-    if selected_count != EXPECTED_SELECTED_TOPIC_COUNT:
-        raise SystemExit(
-            f"Unexpected selected topic count: {selected_count} (expected {EXPECTED_SELECTED_TOPIC_COUNT})"
-        )
-    if annual_count != EXPECTED_ANNUAL_EVIDENCE_ROW_COUNT:
-        raise SystemExit(
-            f"Unexpected annual evidence row count: {annual_count} (expected {EXPECTED_ANNUAL_EVIDENCE_ROW_COUNT})"
-        )
-
-    if int(selection_manifest.get("selected_micro_topic_count", -1)) != EXPECTED_SELECTED_TOPIC_COUNT:
-        raise SystemExit("selection_manifest.json has an unexpected selected_micro_topic_count")
-    if int(selection_manifest.get("annual_evidence_row_count", -1)) != EXPECTED_ANNUAL_EVIDENCE_ROW_COUNT:
-        raise SystemExit("selection_manifest.json has an unexpected annual_evidence_row_count")
+    observed_counts = {
+        "selected_micro_topic_count": int(selected_topics.shape[0]),
+        "annual_evidence_row_count": int(annual_evidence.shape[0]),
+    }
+    for field, observed in observed_counts.items():
+        declared = int(selection_manifest.get(field, -1))
+        if declared != observed:
+            raise SystemExit(
+                f"selection_manifest.json declares {field}={declared}, but the input file contains {observed} rows"
+            )
 
     return selection_manifest
 

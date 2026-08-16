@@ -1,52 +1,93 @@
 # Sustainability Discourse Paper Code
 
-Minimal code supplement for Chapter 4 of the thesis/paper.
+This repository is the code supplement for Chapter 4 of the thesis. It covers the computational route from a prepared three source corpus to six environmental domain assignments, validated source and domain corpora, source specific BERTopic microtopics, reviewed topic consolidation, corporate centered cross source comparison, and Gemma assisted temporal synthesis.
 
-This repository keeps only the scripts needed to understand the computational route used in the chapter:
+Empirical data and generated research outputs are excluded. A reader can run the code with another corpus that follows the documented schema.
 
-1. classify texts into six environmental discourse domains;
-2. run BERTopic separately by source and domain;
-3. prepare selected microtopics for Colab/Gemma synthesis;
-4. review and select microtopics around corporate anchors;
-5. compare selected microtopics across sources.
+## Methodological scope
 
-No empirical data are included. The repository does not include corpus files, chunks, embeddings, generated CSV/Parquet/XLSX files, BERTopic models, filled workbooks, Colab input/output bundles, rendered figures, or final paper tables.
+The retained implementation follows these Chapter 4 parameters.
 
-## Scripts, Inputs, and Outputs
+| Component | Published specification |
+|---|---|
+| Embeddings | `BAAI/bge-large-en-v1.5` with 1024 dimensions |
+| Domain assignment | Best cosine similarity of at least `0.65`; `score_gap`/`score_margin=0.02` recorded as diagnostics and available for optional sensitivity analysis |
+| Relevance validation | `google/gemma-4-E4B-it`, binary `yes` or `no`, `max_new_tokens=1`, deterministic decoding, `AutoModelForCausalLM` |
+| BERTopic models | One model for each of the 18 source and domain subgroups |
+| Vectorization | English stop words, `min_df=1`, `max_df=0.95` |
+| Topic representation | KeyBERTInspired, part of speech filtering, and Maximal Marginal Relevance |
+| Cross source selection | Initial corporate review threshold `0.60`; `0.65` retained as main reference threshold, with below-0.65 review band and manual overrides |
 
-The route below shows what each step needs and what it produces. Inputs and outputs are expected to exist locally, outside version control.
+The source values expected by the scripts are `academic`, `media`, and `corporate`. The environmental domain codes are `T1` through `T6`. The ODS/SDG crosswalk fields in the catalog are metadata. Domain assignment embeds the descriptor expressions, not the crosswalk strings.
 
-| Step | Purpose | Inputs | Scripts | Outputs |
-|---|---|---|---|---|
-| 1. Define six domains | Create the environmental-domain catalog used for classification. | No external input. The catalog is defined in code/static catalog files. | `pipeline/02_topic_modeling/six_topic_discourse_catalog.py` | Six-domain catalog in `catalog/`, used by later assignment scripts. |
-| 2. Assign texts to domains | Link chunks/documents to the six domains using embeddings and cosine similarity. | Local prepared corpus, document/chunk metadata, local embeddings, and local config. | `pipeline/02_topic_modeling/run_6topic_discourse_cosine.py` | Local domain-assignment outputs, including labeled corpus tables. |
-| 3. Apply validation adjustments | Apply validation and manual adjustment decisions before topic modeling. | Local validation outputs and local adjustment/review decisions. | `pipeline/02_topic_modeling/materialize_adjusted_full_validation_output.py` | Adjusted full assignment table and filtered modeling corpus. |
-| 4. Run BERTopic by source and domain | Fit separate BERTopic models for each source-domain subgroup. | Adjusted modeling corpus and local embeddings. | `pipeline/02_topic_modeling/run_6topic_micro_unsupervised.py` | Local BERTopic microtopic outputs by source and domain. |
-| 5. Merge reviewed microtopics | Convert review decisions into a merged microtopic structure. | Raw BERTopic outputs and local microtopic review decisions/workbook. | `pipeline/02_topic_modeling/materialize_microtopic_group_review_mapping.py`; `pipeline/02_topic_modeling/build_merged_microtopic_root.py` | Reviewed mapping files and merged microtopic root. |
-| 6. Compare microtopics across sources | Build profile texts, embed them, and match similar microtopics across source pairs. | Merged microtopic root, profile text inputs, and embedding configuration. | `pipeline/05_cross_source_comparison/build_cross_source_microtopic_profiles.py`; `pipeline/05_cross_source_comparison/embed_cross_source_microtopic_profiles.py`; `pipeline/05_cross_source_comparison/match_cross_source_microtopics.py` | Local profile embeddings and cross-source candidate match tables. |
-| 7. Select corporate-focused topics | Build and review the corporate-centered subset of microtopics. | Merged microtopics, cross-source matches, corporate-anchor review decisions, and optional overrides. | `pipeline/04_classification_and_review/build_corporate_focus_review.py`; `pipeline/04_classification_and_review/build_corporate_focus_hybrid_review_workbook.py`; `pipeline/04_classification_and_review/build_corporate_focus_override_packages.py`; `pipeline/04_classification_and_review/run_corporate_focus_stage12_prep.py` | Corporate-focused review files, review workbook, override packages, and Stage 1/2 preparation outputs. |
-| 8. Run Colab/Gemma temporal synthesis | Prepare Colab inputs and run annual plus temporal LLM synthesis. | Selected corporate-focused microtopics, year evidence, Colab/Gemma access, and downloaded Colab outputs for restore. | `pipeline/03_topic_description_and_interpretation/build_corporate_focus_stage12_inputs.py`; `pipeline/03_topic_description_and_interpretation/build_corporate_focus_colab_package.py`; `pipeline/03_topic_description_and_interpretation/build_corporate_focus_drive_colab_bundle.py`; `pipeline/03_topic_description_and_interpretation/run_hf_gemma_micro_topic_year_summaries_colab.py`; `pipeline/03_topic_description_and_interpretation/run_hf_gemma_micro_topic_evolution_synthesis_colab.py`; `pipeline/03_topic_description_and_interpretation/restore_corporate_focus_colab_outputs.py` | Colab input bundles, annual summaries, temporal evolution narratives, and restored local output folders. |
-| Shared helpers | Provide common path, config, text, workbook, and workflow utilities used by the scripts above. | Local path configuration and the files passed to each step script. | `pipeline/shared/*.py` | Helper functions only; no direct pipeline output. |
+## Installation
 
-## Local Setup
+Python 3.11 is recommended. Run the following commands from the repository root.
 
-Copy the example config and point it to local external files:
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements-full.txt
+python -m spacy download en_core_web_sm
+```
+
+The command-line scripts locate the shared helper directory automatically when they are run from the repository root.
+
+Copy the example configuration and edit the local paths when needed.
 
 ```bash
 cp config/paper_6topic_pipeline_config.example.json config/paper_6topic_pipeline_config.json
 ```
 
-Run scripts from the repository root with shared helpers on `PYTHONPATH`:
+The Gemma stages require access to the model on Hugging Face and a compatible GPU runtime for full runs. The historical route uses `AutoModelForCausalLM` with tokenizer chat templates and 4-bit loading on CUDA. CPU only readers can run the preparation, assignment, review, and most downstream materialization steps with a small corpus, although embedding and BERTopic execution will be slower. The Gemma runners also expose `--device cpu` for explicit smoke tests with the same model and prompts; CPU mode disables BitsAndBytes quantization and is not intended for full-corpus generation.
+
+## Prepared corpus schema
+
+The prepared corpus may be a Parquet or CSV file for embedding creation. Domain assignment reads Parquet. It requires these columns.
+
+| Column | Meaning |
+|---|---|
+| `doc_id` | Stable document identifier |
+| `chunk_id` | Stable and unique text unit identifier |
+| `text` | Text used for embedding, classification, and topic modeling |
+| `source` | One of `academic`, `media`, or `corporate` |
+| `year` | Integer publication or filing year |
+| `industry` | Industry label or an empty string when it does not apply |
+| `source_doc_id` | Source level document identifier used for document counts |
+
+Corpus row order must remain stable between embedding creation and domain assignment. The embedding metadata record the model, number of rows, and dimensions. Domain assignment stops when the configured model and metadata model differ.
+
+## Pipeline route
+
+| Step | Purpose | Main script | Human or external dependency |
+|---|---|---|---|
+| 1 | Create normalized corpus embeddings | `pipeline/01_data_preparation/embed_corpus.py` | Prepared corpus |
+| 2 | Assign chunks to the six domains | `pipeline/02_topic_modeling/run_6topic_discourse_cosine.py` | Local config and embeddings |
+| 3 | Validate provisional assignments | `pipeline/02_topic_modeling/run_hf_gemma_domain_validation_colab.py` | Hugging Face model access and a GPU |
+| 4 | Materialize the validated corpus | `pipeline/02_topic_modeling/materialize_adjusted_full_validation_output.py` | Validation output and optional study specific T2 adjustment inputs |
+| 5 | Fit and save the 18 source and domain BERTopic models | `pipeline/02_topic_modeling/run_6topic_micro_unsupervised.py` | Validated corpus, embeddings, and `en_core_web_sm` |
+| 6 | Prepare and materialize topic merge review | `pipeline/02_topic_modeling/build_microtopic_merge_review_workbook.py` and `pipeline/02_topic_modeling/materialize_microtopic_group_review_mapping.py` | Human review of the workbook |
+| 7 | Build the reviewed merged microtopic root | `pipeline/02_topic_modeling/build_merged_microtopic_root.py` | Reviewed mapping |
+| 8 | Build, embed, and compare cross source profiles | Scripts in `pipeline/05_cross_source_comparison` | Sentence transformer model |
+| 9 | Construct the initial corporate centered repertoire | `pipeline/04_classification_and_review/build_corporate_focus_review.py` | Human review of corporate and external topic decisions |
+| 10 | Prepare and run temporal synthesis | Scripts in `pipeline/03_topic_description_and_interpretation` | Hugging Face model access and a GPU |
+| 11 | Audit the repertoire with temporal narratives | `pipeline/04_classification_and_review/build_corporate_focus_hybrid_review_workbook.py` | Completed Stage 2 narratives and human review |
+
+The merge review workbook begins with every non outlier microtopic listed as a singleton. This is an explicit pending review state. The reviewer moves candidate groups into the two group sheets and records `accept`, `reject`, or `split` decisions before materialization.
+
+The initial corporate review includes all corporate groups and selects academic or media groups when any direct corporate relation reaches `0.60`. The `0.65` value is the main reporting/reference threshold, not a complete automatic selection rule; below-0.65 candidates and manual overrides are handled through review workbooks. After temporal synthesis, the hybrid workbook brings the Stage 2 narratives back into the review so the researcher can compare corporate and noncorporate interpretations.
+
+## Quick structural check
+
+The following command verifies that every Python file compiles without downloading research models.
 
 ```bash
-export PYTHONPATH=pipeline/shared
-python pipeline/02_topic_modeling/run_6topic_discourse_cosine.py --help
+python -m compileall -q pipeline
 ```
 
-See `manifests/script_manifest.csv` for the compact script index.
+The full command sequence and the boundaries between automated and reviewed stages are documented in [REPRODUCIBILITY.md](REPRODUCIBILITY.md). The compact script index is in [manifests/script_manifest.csv](manifests/script_manifest.csv).
 
-## Data Availability
+## Data availability
 
-Data are not included in this repository. To run the pipeline, the user must provide local corpus files, embeddings, validation decisions, review decisions, and generated intermediate files through local paths or script arguments.
-
-Generated files should remain outside version control under ignored locations such as `data/`, `outputs/`, `pipeline/**/inputs/`, or `pipeline/**/outputs/`.
+The original corpus, embeddings, validation outputs, filled review workbooks, fitted BERTopic models, Gemma outputs, figures, and final tables are not included. Generated files should remain under ignored local directories such as `data`, `outputs`, and stage specific input or output folders.

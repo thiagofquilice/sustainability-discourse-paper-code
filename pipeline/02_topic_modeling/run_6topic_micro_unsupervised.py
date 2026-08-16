@@ -1,27 +1,44 @@
 #!/usr/bin/env python3
+# ruff: noqa: E402
 """Fit unsupervised BERTopic models for each source-topic subgroup in the adjusted 6-topic corpus."""
 
 from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import pandas as pd
 
+SHARED_DIR = Path(__file__).resolve().parents[1] / "shared"
+if str(SHARED_DIR) not in sys.path:
+    sys.path.insert(0, str(SHARED_DIR))
+
 from workflow_common import configure_logging, load_sentence_transformer, read_json
 
 
 WORKFLOW_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_INPUT = WORKFLOW_ROOT / "outputs" / "full_run" / "adjusted_with_t2_secondary_recovery" / "adjusted_full_yes.csv"
+DEFAULT_INPUT = WORKFLOW_ROOT / "outputs" / "validation" / "adjusted" / "adjusted_full_yes.csv"
 DEFAULT_OUTPUT_ROOT = WORKFLOW_ROOT / "outputs" / "bertopic_micro_unsupervised_multiaspect"
 DEFAULT_EMBEDDING_FILE = Path("data/external/filtered_embeddings.f32")
 DEFAULT_EMBEDDING_META = Path("data/external/filtered_embeddings.meta.json")
 DEFAULT_CATALOG = WORKFLOW_ROOT / "catalog" / "six_topic_discourse_catalog.csv"
 SOURCE_ORDER = ["academic", "media", "corporate"]
 SPACY_MODEL_NAME = "en_core_web_sm"
+TOPIC_ASPECT_COLUMNS = [
+    "micro_topic_id",
+    "topic_name_original",
+    "topic_size",
+    "main_terms_display",
+    "pos_terms_display",
+    "aspect2_terms_display",
+    "main_terms_json",
+    "pos_terms_json",
+    "aspect2_terms_json",
+]
 
 
 def json_ready(value: Any) -> Any:
@@ -122,12 +139,16 @@ def build_representation_model() -> dict[str, Any]:
     }
 
 
-def build_model(n_rows: int, embedding_model_backend: Any):
+def build_model(
+    n_rows: int,
+    embedding_model_backend: Any,
+    vectorizer_max_df: float = 0.95,
+):
     from bertopic import BERTopic
     from bertopic.vectorizers import ClassTfidfTransformer
     from sklearn.feature_extraction.text import CountVectorizer
 
-    vectorizer = CountVectorizer(stop_words="english", min_df=1, max_df=0.95)
+    vectorizer = CountVectorizer(stop_words="english", min_df=1, max_df=vectorizer_max_df)
     ctfidf_model = ClassTfidfTransformer(reduce_frequent_words=True)
     return BERTopic(
         embedding_model=embedding_model_backend,
@@ -172,7 +193,7 @@ def build_topic_aspects_frame(topic_info: pd.DataFrame, topic_aspects: dict[str,
             record[f"{column_prefix}_terms_display"] = " | ".join(terms)
             record[f"{column_prefix}_terms_json"] = json.dumps(json_ready(raw_value), ensure_ascii=False)
         rows.append(record)
-    return pd.DataFrame(rows)
+    return pd.DataFrame(rows, columns=TOPIC_ASPECT_COLUMNS)
 
 
 def write_descriptions(summary_dir: Path) -> None:
@@ -218,6 +239,8 @@ def collect_existing_manifests(output_root: Path) -> pd.DataFrame:
 
 
 def build_summary_outputs(output_root: Path) -> None:
+    import matplotlib.pyplot as plt
+
     summary_dir = output_root / "summary"
     summary_dir.mkdir(parents=True, exist_ok=True)
     figures_dir = summary_dir / "figures"
@@ -251,7 +274,10 @@ def build_summary_outputs(output_root: Path) -> None:
             )
         topic_aspects_csv = path.parent / "topic_aspects.csv"
         if topic_aspects_csv.exists():
-            aspect_frame = pd.read_csv(topic_aspects_csv)
+            try:
+                aspect_frame = pd.read_csv(topic_aspects_csv)
+            except pd.errors.EmptyDataError:
+                aspect_frame = pd.DataFrame(columns=TOPIC_ASPECT_COLUMNS)
             aspect_frame["subgroup"] = subgroup_name
             aspect_frame["source"] = manifest.get("source")
             aspect_frame["assigned_label"] = manifest.get("assigned_label")
@@ -350,6 +376,7 @@ def build_summary_outputs(output_root: Path) -> None:
         },
     }
     (summary_dir / "manifest.json").write_text(json.dumps(summary_manifest, indent=2), encoding="utf-8")
+    (output_root / "manifest.json").write_text(json.dumps(summary_manifest, indent=2), encoding="utf-8")
 
 
 def main() -> None:
@@ -428,8 +455,36 @@ def main() -> None:
                 embeddings[subset["embedding_row_index"].astype(int).to_numpy()],
                 dtype="float32",
             )
-            model = build_model(len(subset), embedding_model_backend=representation_embedding_backend)
-            topics, probabilities = model.fit_transform(subset["text"].fillna("").astype(str).tolist(), embeddings=subgroup_embeddings)
+            vectorizer_max_df_used = 0.95
+            model = build_model(
+                len(subset),
+                embedding_model_backend=representation_embedding_backend,
+                vectorizer_max_df=vectorizer_max_df_used,
+            )
+            documents = subset["text"].fillna("").astype(str).tolist()
+            try:
+                topics, probabilities = model.fit_transform(
+                    documents,
+                    embeddings=subgroup_embeddings,
+                )
+            except ValueError as exc:
+                if "max_df corresponds to < documents than min_df" not in str(exc):
+                    raise
+                vectorizer_max_df_used = 1.0
+                warning = (
+                    "vectorizer_max_df_fallback_1.0"
+                    if warning is None
+                    else f"{warning};vectorizer_max_df_fallback_1.0"
+                )
+                model = build_model(
+                    len(subset),
+                    embedding_model_backend=representation_embedding_backend,
+                    vectorizer_max_df=vectorizer_max_df_used,
+                )
+                topics, probabilities = model.fit_transform(
+                    documents,
+                    embeddings=subgroup_embeddings,
+                )
 
             subset["micro_topic_id"] = pd.Series(topics, index=subset.index, dtype="Int64")
             subset["micro_topic_probability"] = pd.NA if probabilities is None else probabilities
@@ -463,6 +518,25 @@ def main() -> None:
             except Exception:
                 pass
 
+            model_dir = subgroup_dir / "bertopic_model"
+            model_save_status = "not_attempted"
+            try:
+                model.save(
+                    str(model_dir),
+                    serialization="safetensors",
+                    save_ctfidf=True,
+                    save_embedding_model=False,
+                )
+                model_save_status = "written_safetensors"
+            except Exception as exc:  # noqa: BLE001
+                fallback_dir = subgroup_dir / "bertopic_model_pickle"
+                try:
+                    model.save(str(fallback_dir), serialization="pickle")
+                    model_dir = fallback_dir
+                    model_save_status = f"written_pickle_after_safetensors_failed: {exc}"
+                except Exception as fallback_exc:  # noqa: BLE001
+                    model_save_status = f"failed: {exc}; pickle_fallback_failed: {fallback_exc}"
+
             outlier_share = float((subset["micro_topic_id"] == -1).mean())
             largest_topic_size = int(valid_topic_info["Count"].max()) if not valid_topic_info.empty else 0
             n_topics_found = int(valid_topic_info["Topic"].nunique())
@@ -477,6 +551,7 @@ def main() -> None:
                 "year_max": int(pd.to_numeric(subset["year"]).max()),
                 "year_count": int(pd.to_numeric(subset["year"]).nunique()),
                 "min_topic_size": subgroup_min_topic_size(len(subset)),
+                "vectorizer_max_df": vectorizer_max_df_used,
                 "n_topics_found": n_topics_found,
                 "largest_topic_size": largest_topic_size,
                 "outlier_share": outlier_share,
@@ -488,6 +563,8 @@ def main() -> None:
                 "representation_embedding_model": representation_embedding_model_name,
                 "topic_aspects_json": str(subgroup_dir / "topic_aspects.json"),
                 "topic_aspects_csv": str(subgroup_dir / "topic_aspects.csv"),
+                "model_dir": str(model_dir),
+                "model_save_status": model_save_status,
             }
             (subgroup_dir / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
             subgroup_manifests.append(manifest)

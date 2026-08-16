@@ -14,14 +14,11 @@ from pathlib import Path
 import pandas as pd
 
 
-PIPELINE_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_BUNDLE_ROOT = PIPELINE_ROOT / "outputs" / "corporate_focus_stage12_colab_drive_with_overrides"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_BUNDLE_ROOT = REPO_ROOT / "outputs" / "corporate_focus_stage12_colab_drive"
 DEFAULT_OUTPUTS_DIR = DEFAULT_BUNDLE_ROOT / "colab_outputs"
 DEFAULT_ARCHIVE_DIR = DEFAULT_BUNDLE_ROOT / "restored_download_archives"
 DEFAULT_STAGING_DIR = DEFAULT_BUNDLE_ROOT / "restored_download_staging"
-
-EXPECTED_STAGE1_ROWS = 4344
-EXPECTED_STAGE2_ROWS = 241
 
 
 def parse_args() -> argparse.Namespace:
@@ -190,26 +187,41 @@ def count_error_rows(path: Path) -> int:
     return int(len(frame))
 
 
-def validate_counts(required: dict[str, Path]) -> dict[str, int]:
+def load_expected_counts(bundle_root: Path) -> dict[str, int]:
+    manifest_path = bundle_root / "colab_bundle_manifest.json"
+    ensure_exists(manifest_path, "bundle manifest")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    expected = {
+        "stage1_rows": int(manifest.get("annual_evidence_row_count", -1)),
+        "stage2_rows": int(manifest.get("selected_micro_topic_count", -1)),
+    }
+    if expected["stage1_rows"] < 0 or expected["stage2_rows"] < 0:
+        raise RuntimeError(f"Bundle manifest has invalid expected counts: {expected}")
+    return expected
+
+
+def validate_counts(required: dict[str, Path], expected: dict[str, int]) -> dict[str, int]:
     stage1_rows = count_csv_rows(required["stage1_csv"])
     stage1_error_rows = count_error_rows(required["phase1_dir"] / "error_log.csv")
     stage2_rows = count_csv_rows(required["stage2_csv"])
     stage2_error_rows = count_error_rows(required["stage2_error"])
 
-    if stage1_rows != EXPECTED_STAGE1_ROWS and (stage1_rows + stage1_error_rows) != EXPECTED_STAGE1_ROWS:
+    expected_stage1_rows = expected["stage1_rows"]
+    expected_stage2_rows = expected["stage2_rows"]
+    if stage1_rows != expected_stage1_rows and (stage1_rows + stage1_error_rows) != expected_stage1_rows:
         raise RuntimeError(
             "Stage 1 coverage mismatch: expected "
-            f"{EXPECTED_STAGE1_ROWS}, got rows={stage1_rows} and error_rows={stage1_error_rows}"
+            f"{expected_stage1_rows}, got rows={stage1_rows} and error_rows={stage1_error_rows}"
         )
-    if stage1_rows != EXPECTED_STAGE1_ROWS:
+    if stage1_rows != expected_stage1_rows:
         print_log(
             "Stage 1 annual summaries are not fully complete in the downloaded archive, "
             f"but rows + error_rows still cover the expected total "
-            f"({stage1_rows} + {stage1_error_rows} = {EXPECTED_STAGE1_ROWS})."
+            f"({stage1_rows} + {stage1_error_rows} = {expected_stage1_rows})."
         )
-    if stage2_rows != EXPECTED_STAGE2_ROWS:
+    if stage2_rows != expected_stage2_rows:
         raise RuntimeError(
-            f"Stage 2 row count mismatch: expected {EXPECTED_STAGE2_ROWS}, got {stage2_rows}"
+            f"Stage 2 row count mismatch: expected {expected_stage2_rows}, got {stage2_rows}"
         )
     if stage2_error_rows != 0:
         raise RuntimeError(
@@ -276,9 +288,10 @@ def write_restore_manifest(
     staging_dir: Path,
     active_outputs_dir: Path,
     counts: dict[str, int],
+    expected: dict[str, int],
 ) -> Path:
     warnings: list[str] = []
-    if counts["stage1_rows"] != EXPECTED_STAGE1_ROWS:
+    if counts["stage1_rows"] != expected["stage1_rows"]:
         warnings.append(
             "Stage 1 restored from a run with non-zero error_log coverage; "
             f"rows={counts['stage1_rows']} error_rows={counts['stage1_error_rows']}."
@@ -289,9 +302,9 @@ def write_restore_manifest(
         "staging_dir": str(staging_dir),
         "active_outputs_dir": str(active_outputs_dir),
         "expected_counts": {
-            "stage1_rows": EXPECTED_STAGE1_ROWS,
+            "stage1_rows": expected["stage1_rows"],
             "stage1_error_rows": 0,
-            "stage2_rows": EXPECTED_STAGE2_ROWS,
+            "stage2_rows": expected["stage2_rows"],
             "stage2_error_rows": 0,
         },
         "observed_counts": counts,
@@ -307,6 +320,7 @@ def main() -> None:
 
     ensure_exists(args.source_zip, "source zip")
     ensure_exists(args.bundle_root, "bundle root")
+    expected = load_expected_counts(args.bundle_root)
 
     active_outputs_dir = args.bundle_root / "colab_outputs"
     archive_dir = args.bundle_root / "restored_download_archives"
@@ -322,7 +336,7 @@ def main() -> None:
     print_log(f"Using extracted colab_outputs root: {colab_outputs_root}")
 
     required = validate_required_files(colab_outputs_root)
-    counts = validate_counts(required)
+    counts = validate_counts(required, expected)
     print_log(
         "Validated counts: "
         f"stage1_rows={counts['stage1_rows']} "
@@ -339,6 +353,7 @@ def main() -> None:
         staging_dir=colab_outputs_root,
         active_outputs_dir=active_outputs_dir,
         counts=counts,
+        expected=expected,
     )
     print_log(f"Wrote restore manifest to {manifest_path}")
 

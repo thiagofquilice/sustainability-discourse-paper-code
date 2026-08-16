@@ -1,12 +1,18 @@
 #!/usr/bin/env python3
+# ruff: noqa: E402
 """Build canonical microtopic profile tables for cross-source matching."""
 
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
 import pandas as pd
+
+SHARED_DIR = Path(__file__).resolve().parents[1] / "shared"
+if str(SHARED_DIR) not in sys.path:
+    sys.path.insert(0, str(SHARED_DIR))
 
 from cross_source_microtopic_common import (
     MACRO_TOPIC_ORDER,
@@ -19,7 +25,6 @@ from cross_source_microtopic_common import (
     ensure_directory,
     json_dumps,
     list_subgroup_dirs,
-    ordered_frame,
     parse_topic_terms,
     read_json,
     subgroup_macro_topic_name,

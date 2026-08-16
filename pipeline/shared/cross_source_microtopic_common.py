@@ -9,7 +9,6 @@ import math
 from pathlib import Path
 from typing import Any
 
-import numpy as np
 import pandas as pd
 
 from micro_topic_evolution_common import is_stage2_narrative_ready
@@ -17,7 +16,7 @@ from micro_topic_evolution_common import is_stage2_narrative_ready
 
 LOGGER = logging.getLogger("cross_source_microtopics")
 WORKFLOW_ROOT = Path(__file__).resolve().parents[2]
-MICRO_ROOT = WORKFLOW_ROOT / "outputs" / "bertopic_micro_unsupervised"
+MICRO_ROOT = WORKFLOW_ROOT / "outputs" / "bertopic_micro_merged_multiaspect_reviewed"
 OUTPUT_ROOT = WORKFLOW_ROOT / "outputs" / "microtopic_cross_source_pairs"
 DEFAULT_THRESHOLD_065_OUTPUT_ROOT = WORKFLOW_ROOT / "outputs" / "microtopic_cross_source_pairs_threshold_065"
 YEAR_SUMMARIES_PATH = (

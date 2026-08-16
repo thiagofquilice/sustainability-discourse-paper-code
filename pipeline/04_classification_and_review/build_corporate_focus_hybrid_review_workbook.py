@@ -1,13 +1,19 @@
 #!/usr/bin/env python3
+# ruff: noqa: E402
 """Build a hybrid corporate-focus review workbook for human comparison."""
 
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
+
+SHARED_DIR = Path(__file__).resolve().parents[1] / "shared"
+if str(SHARED_DIR) not in sys.path:
+    sys.path.insert(0, str(SHARED_DIR))
 
 from build_corporate_focus_review import build_pair_evidence, load_group_catalog
 from cross_source_microtopic_common import MACRO_TOPIC_ORDER, SOURCE_ORDER, configure_logging
@@ -21,9 +27,9 @@ from microtopic_posthoc_merge_common import (
 
 
 PIPELINE_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_BUNDLE_ROOT = PIPELINE_ROOT / "outputs" / "corporate_focus_stage12_colab_drive_with_overrides"
-DEFAULT_REVIEW_ROOT = PIPELINE_ROOT / "outputs" / "corporate_focus_review_with_overrides"
-DEFAULT_STAGE12_INPUT_ROOT = PIPELINE_ROOT / "outputs" / "corporate_focus_stage12_input_with_overrides"
+DEFAULT_BUNDLE_ROOT = PIPELINE_ROOT / "outputs" / "corporate_focus_stage12_colab_drive"
+DEFAULT_REVIEW_ROOT = PIPELINE_ROOT / "outputs" / "corporate_focus_review"
+DEFAULT_STAGE12_INPUT_ROOT = PIPELINE_ROOT / "outputs" / "corporate_focus_stage12_input"
 DEFAULT_PAIR_ROOT = PIPELINE_ROOT / "outputs" / "microtopic_cross_source_pairs_corporate_focus"
 
 
@@ -251,6 +257,8 @@ def build_master_review(
             "group_size": "group_size_noncorporate_raw",
         }
     ).copy()
+    if "manual_review_notes" not in master.columns:
+        master["manual_review_notes"] = ""
 
     master = master.merge(
         noncorp_lookup,
@@ -544,7 +552,7 @@ def build_readme_sheet() -> pd.DataFrame:
             },
             {
                 "section": "all_groups_optional",
-                "detail": "Visão enciclopédica dos 241 grupos selecionados com narrativas Stage 2 completas.",
+                "detail": "Visão completa dos grupos selecionados com narrativas Stage 2 disponíveis.",
             },
             {
                 "section": "Manual columns",

@@ -14,7 +14,7 @@ from micro_topic_evolution_common import OUTPUT_ROOT as EVOLUTION_OUTPUT_ROOT
 
 
 WORKFLOW_ROOT = Path(__file__).resolve().parents[2]
-RAW_MICRO_ROOT = WORKFLOW_ROOT / "outputs" / "bertopic_micro_unsupervised"
+RAW_MICRO_ROOT = WORKFLOW_ROOT / "outputs" / "bertopic_micro_unsupervised_multiaspect"
 RAW_MICRO_ROOT_MULTIASPECT = WORKFLOW_ROOT / "outputs" / "bertopic_micro_unsupervised_multiaspect"
 MERGE_OUTPUT_ROOT = WORKFLOW_ROOT / "outputs" / "microtopic_posthoc_merge_review"
 MERGE_FIRST_REVIEW_OUTPUT_ROOT = WORKFLOW_ROOT / "outputs" / "microtopic_merge_first_review"

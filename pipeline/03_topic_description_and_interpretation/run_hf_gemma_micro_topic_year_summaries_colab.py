@@ -69,6 +69,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--batch-size", type=int, default=6)
     parser.add_argument("--save-every", type=int, default=20)
     parser.add_argument("--max-new-tokens", type=int, default=320)
+    parser.add_argument(
+        "--device",
+        choices=["cuda", "cpu", "auto"],
+        default="cuda",
+        help="Execution device. Default cuda preserves the historical Colab route; cpu is for small smoke tests only.",
+    )
     parser.add_argument("--resume", action="store_true", default=True)
     parser.add_argument("--max-rows", type=int, default=None)
     return parser.parse_args()
@@ -163,33 +169,51 @@ def load_model_and_tokenizer(args: argparse.Namespace):
     import transformers
     from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
-    if not torch.cuda.is_available():
+    cuda_available = bool(torch.cuda.is_available())
+    requested_device = args.device
+    execution_device = "cuda" if requested_device == "auto" and cuda_available else requested_device
+    if execution_device == "auto":
+        execution_device = "cpu"
+    if execution_device == "cuda" and not cuda_available:
         raise RuntimeError("No CUDA GPU detected. Use a Colab GPU runtime.")
 
-    quantization_config = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_quant_type="nf4",
-        bnb_4bit_use_double_quant=True,
-        bnb_4bit_compute_dtype=torch.float16,
-    )
     tokenizer = AutoTokenizer.from_pretrained(args.model_name)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "left"
-    model = AutoModelForCausalLM.from_pretrained(
-        args.model_name,
-        device_map="auto",
-        quantization_config=quantization_config,
-    )
+    if execution_device == "cpu":
+        model = AutoModelForCausalLM.from_pretrained(
+            args.model_name,
+            torch_dtype=torch.float32,
+        )
+        model.to("cpu")
+        quantization = "none"
+    else:
+        quantization_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_use_double_quant=True,
+            bnb_4bit_compute_dtype=torch.float16,
+        )
+        model = AutoModelForCausalLM.from_pretrained(
+            args.model_name,
+            device_map="auto",
+            quantization_config=quantization_config,
+        )
+        quantization = "bitsandbytes_4bit_nf4"
     model.eval()
     hardware = {
         "python_version": platform.python_version(),
         "platform": platform.platform(),
         "transformers_version": transformers.__version__,
-        "cuda_available": True,
-        "gpu_name": torch.cuda.get_device_name(0),
+        "cuda_available": cuda_available,
+        "gpu_name": torch.cuda.get_device_name(0) if cuda_available else None,
         "gpu_count": int(torch.cuda.device_count()),
+        "requested_device": requested_device,
+        "execution_device": execution_device,
+        "quantization": quantization,
     }
+    hardware["model_loader"] = "AutoModelForCausalLM"
     return model, tokenizer, hardware
 
 
@@ -203,23 +227,23 @@ def generate_batch(model, tokenizer, rows: list[pd.Series], args: argparse.Names
         for row in rows
     ]
     inputs = tokenizer(prompts, return_tensors="pt", padding=True, truncation=True)
-    input_ids = inputs["input_ids"].to(model.device)
-    attention_mask = inputs["attention_mask"].to(model.device)
+    inputs = {key: value.to(model.device) for key, value in inputs.items()}
+    input_ids = inputs["input_ids"]
     generated = model.generate(
-        input_ids=input_ids,
-        attention_mask=attention_mask,
+        **inputs,
         max_new_tokens=args.max_new_tokens,
         do_sample=False,
         use_cache=True,
         pad_token_id=tokenizer.pad_token_id,
-        eos_token_id=tokenizer.eos_token_id,
     )
     prompt_length = input_ids.shape[1]
-    outputs = []
-    for idx in range(generated.shape[0]):
-        new_tokens = generated[idx, prompt_length:]
-        outputs.append(tokenizer.decode(new_tokens, skip_special_tokens=True).strip())
-    return outputs
+    return [
+        text.strip()
+        for text in tokenizer.batch_decode(
+            generated[:, prompt_length:],
+            skip_special_tokens=True,
+        )
+    ]
 
 
 def load_completed_keys(path: Path) -> set[tuple[str, int, int]]:
